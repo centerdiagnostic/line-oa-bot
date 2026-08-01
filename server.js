@@ -1827,7 +1827,7 @@ app.post('/api/reply', checkAuth, async (req, res) => {
       `INSERT INTO messages (user_id, sender, admin_name, admin_picture, text, timestamp, admin_id, msg_type, file_url) VALUES (?, 'admin', ?, ?, ?, ?, ?, ?, ?)`,
       [userId, senderName, admin.pictureUrl, msgText, now, admin.userId, msgType, savedFileUrl]
     );
-    db.run(`UPDATE customers SET status = 'in_progress', last_update = ? WHERE user_id = ?`, [now, userId]);
+    db.run(`UPDATE customers SET status = 'in_progress', last_update = ?, handled_by = COALESCE(handled_by, ?) WHERE user_id = ?`, [now, admin.userId, userId]);
 
     io.emit('newMessage', { userId, sender: 'admin', adminName: senderName, adminPicture: admin.pictureUrl, text: msgText, timestamp: now, msgType, fileUrl: savedFileUrl });
     io.emit('updateCustomer', { userId, status: 'in_progress', last_update: now });
