@@ -77,6 +77,25 @@
             .chat-area { display: none; flex: 1; }
             .chat-area.active-mobile { display: flex; }
             .back-btn { display: block; margin-right: 10px; cursor: pointer; background: none; border: none; font-size: 1.2rem; color: #00B900; }
+
+            /* ป้องกันหัวข้อ/เมนู/โปรไฟล์ล้นจอ ให้ห่อบรรทัดแทนการดันให้เลื่อนแนวนอน */
+            body { overflow-x: hidden; }
+            .header { flex-wrap: wrap; row-gap: 8px; padding: 10px 12px; }
+            .header > div:first-child { flex-wrap: wrap; row-gap: 8px; gap: 8px !important; width: 100%; }
+            .header-brand { font-size: 1rem; }
+            #adminMenu, #broadcastMenu { display: flex !important; flex-wrap: wrap; gap: 6px !important; width: 100%; margin-left: 0 !important; }
+            .nav-btn { font-size: 0.75rem; padding: 5px 10px; }
+            .admin-profile { width: 100%; justify-content: space-between; gap: 8px; }
+            .admin-info { text-align: left; }
+            .admin-role-label { font-size: 0.7rem; }
+            .admin-name { font-size: 0.9rem; }
+            .edit-name-btn { font-size: 0.65rem; padding: 3px 8px; }
+
+            /* ตารางหรือกล่องที่กว้างเกินจอ ให้เลื่อนได้เฉพาะจุด ไม่ดันทั้งหน้าให้เลื่อน */
+            .chat-input-area { padding: 10px 8px; gap: 6px; }
+            .chat-input { font-size: 0.9rem; padding: 8px 12px; }
+            .send-btn { padding: 8px 14px; font-size: 0.9rem; }
+            .quick-reply-area { padding: 6px 8px; }
         }
         @media (min-width: 769px) { .back-btn { display: none; } }
         

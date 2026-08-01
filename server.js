@@ -257,20 +257,12 @@ app.get('/auth/line/callback', async (req, res) => {
         `INSERT INTO admins (user_id, display_name, picture_url, custom_name, role, can_broadcast) 
          VALUES (?, ?, ?, NULL, ?, ?) 
          ON CONFLICT (user_id) DO UPDATE SET display_name=EXCLUDED.display_name, picture_url=EXCLUDED.picture_url, role=EXCLUDED.role, can_broadcast=EXCLUDED.can_broadcast`,
-        [profile.userId, profile.displayName, profile.pictureUrl, currentRole, canBroadcast],
-        function(err) {
-          if (err) console.error('❌ Insert admin failed:', profile.userId, err.message);
-          else console.log('✅ Admin inserted/updated:', profile.userId, currentRole);
-        }
+        [profile.userId, profile.displayName, profile.pictureUrl, currentRole, canBroadcast]
       );
     } else {
       db.run(
         `UPDATE admins SET display_name=?, picture_url=?, role=?, can_broadcast=? WHERE user_id=?`,
-        [profile.displayName, profile.pictureUrl, currentRole, canBroadcast, profile.userId],
-        function(err) {
-          if (err) console.error('❌ Update admin failed:', profile.userId, err.message);
-          else console.log('✅ Admin updated:', profile.userId, currentRole);
-        }
+        [profile.displayName, profile.pictureUrl, currentRole, canBroadcast, profile.userId]
       );
     }
 
@@ -417,6 +409,17 @@ app.get('/manage', checkAuth, checkAdminRole, (req, res) => {
         .role-pending { background-color: #fff3e0; color: #f57c00; }
         select { padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; font-family: inherit; font-size: 0.9rem; outline: none; cursor: pointer; }
         select:focus { border-color: #00B900; }
+
+        @media (max-width: 768px) {
+          body { overflow-x: hidden; }
+          .header { flex-wrap: wrap; row-gap: 8px; padding: 12px 15px; }
+          .header h1 { font-size: 1rem; }
+          .back-btn { padding: 6px 10px; font-size: 0.8rem; }
+          .container { margin: 16px auto; padding: 0 12px; }
+          .card { padding: 12px; }
+          #usersList { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          table { min-width: 560px; }
+        }
       </style>
     </head>
     <body>
@@ -537,6 +540,19 @@ app.get('/summary', checkAuth, checkAdminRole, (req, res) => {
         .admin-role { font-size: 0.75rem; padding: 4px 10px; border-radius: 12px; font-weight: bold; }
         .role-admin { background: #e3f2fd; color: #1976d2; }
         .role-op { background: #f1f8e9; color: #388e3c; }
+
+        @media (max-width: 768px) {
+          body { overflow-x: hidden; }
+          .header { flex-wrap: wrap; row-gap: 8px; padding: 12px 15px; }
+          .header h1 { font-size: 1rem; }
+          .back-btn { padding: 6px 10px; font-size: 0.8rem; }
+          .container { margin: 16px auto; padding: 0 12px; }
+          .filter-bar { flex-wrap: wrap; padding: 12px 15px; gap: 10px; }
+          .info-panel { padding: 15px; }
+          .modal-content { width: 90vw; max-width: 360px; padding: 18px; }
+          .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          table { min-width: 480px; }
+        }
       </style>
     </head>
     <body>
@@ -588,18 +604,20 @@ app.get('/summary', checkAuth, checkAdminRole, (req, res) => {
             <canvas id="summaryChart"></canvas>
           </div>
           
-          <table>
-            <thead>
-              <tr>
-                <th>ชื่อแอดมินที่ใช้ตอบ</th>
-                <th>จำนวนข้อความที่ตอบ</th>
-                <th>คะแนนรีวิวเฉลี่ย</th>
-              </tr>
-            </thead>
-            <tbody id="adminStatsBody">
-              <tr><td colspan="3" style="text-align:center;">กำลังโหลด...</td></tr>
-            </tbody>
-          </table>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>ชื่อแอดมินที่ใช้ตอบ</th>
+                  <th>จำนวนข้อความที่ตอบ</th>
+                  <th>คะแนนรีวิวเฉลี่ย</th>
+                </tr>
+              </thead>
+              <tbody id="adminStatsBody">
+                <tr><td colspan="3" style="text-align:center;">กำลังโหลด...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
@@ -822,9 +840,9 @@ app.get('/api/summary_data', checkAuth, checkAdminRole, (req, res) => {
               // 6. สถิติรายแอดมิน (อิงตาม admin_id เพื่อรวมยอดทุกชื่อของคนเดียวกัน พร้อมคะแนนรีวิวเฉลี่ย)
               const statsQuery = `
                 SELECT 
-                  COALESCE(MAX(a.custom_name), MAX(a.display_name), MAX(m.admin_name)) as admin_name, 
+                  COALESCE(a.custom_name, a.display_name, m.admin_name) as admin_name, 
                   COUNT(m.id) as reply_count,
-                  (SELECT AVG(r.score) FROM ratings r WHERE r.admin_id = MAX(m.admin_id)) as avg_rating
+                  (SELECT AVG(r.score) FROM ratings r WHERE r.admin_id = m.admin_id) as avg_rating
                 FROM messages m 
                 LEFT JOIN admins a ON m.admin_id = a.user_id 
                 WHERE m.sender = 'admin' ` + dateConditionMsg.replace('timestamp', 'm.timestamp') + `
@@ -869,6 +887,18 @@ app.get('/manage_qr', checkAuth, checkAdminRole, (req, res) => {
         td { padding: 12px 15px; border-bottom: 1px solid #eee; vertical-align: top; }
         .btn-delete { background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; font-weight: bold; }
         .btn-edit { background: #ffc107; color: #333; border: none; padding: 6px 12px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; font-weight: bold; margin-right: 5px; }
+
+        @media (max-width: 768px) {
+          body { overflow-x: hidden; }
+          .header { flex-wrap: wrap; row-gap: 8px; padding: 12px 15px; }
+          .header h1 { font-size: 1rem; }
+          .back-btn { padding: 6px 10px; font-size: 0.8rem; }
+          .container { margin: 16px auto; padding: 0 12px; }
+          .card { padding: 12px; }
+          .btn-add, .btn-cancel { width: 100%; margin: 5px 0 0 0; box-sizing: border-box; }
+          #qrList { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          table { min-width: 480px; }
+        }
       </style>
     </head>
     <body>
@@ -1034,6 +1064,19 @@ app.get('/broadcast', checkAuth, checkBroadcastRole, (req, res) => {
         .bubble { max-width: 80%; background: #00B900; color: white; padding: 10px 14px; border-radius: 14px; border-top-left-radius: 4px; font-size: 0.95rem; align-self: flex-start; word-wrap: break-word; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
         .bubble-img { max-width: 80%; border-radius: 14px; align-self: flex-start; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
         .bubble-flex { background: white; color: #333; max-width: 85%; padding: 15px; border-radius: 14px; align-self: flex-start; box-shadow: 0 1px 2px rgba(0,0,0,0.1); border-top-left-radius: 4px; display: flex; gap: 10px; align-items: center; }
+
+        @media (max-width: 900px) {
+          body { overflow-x: hidden; }
+          .topbar { flex-wrap: wrap; row-gap: 8px; padding: 12px 15px; }
+          .topbar h1 { font-size: 1rem; width: 100%; }
+          .topbar-actions { width: 100%; flex-wrap: wrap; }
+          .topbar-actions a, .topbar-actions button { flex: 1; text-align: center; }
+          .layout { flex-direction: column; padding: 0 12px; margin: 12px auto; }
+          .row { flex-direction: column; }
+          .col-label { width: 100%; margin-bottom: 8px; }
+          .target-box { width: 100%; margin-left: 0; margin-top: 10px; box-sizing: border-box; }
+          .preview-pane { width: 100%; position: static; }
+        }
       </style>
     </head>
     <body>
@@ -1429,6 +1472,19 @@ app.get('/manage_rich_msg', checkAuth, checkBroadcastRole, (req, res) => {
         td { padding: 12px 15px; border-bottom: 1px solid #eee; vertical-align: top; }
         .btn-delete { background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; font-size: 0.8rem; cursor: pointer; font-weight: bold; }
         .preview-img { max-width: 150px; border-radius: 8px; border: 1px solid #ddd; }
+
+        @media (max-width: 768px) {
+          body { overflow-x: hidden; }
+          .header { flex-wrap: wrap; row-gap: 8px; padding: 12px 15px; }
+          .header h1 { font-size: 1rem; }
+          .back-btn { padding: 6px 10px; font-size: 0.8rem; }
+          .container { margin: 16px auto; padding: 0 12px; }
+          .card { padding: 12px; }
+          .btn-add { width: 100%; }
+          #rmList { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          table { min-width: 480px; }
+          .preview-img { max-width: 90px; }
+        }
       </style>
     </head>
     <body>
@@ -1827,7 +1883,7 @@ app.post('/api/reply', checkAuth, async (req, res) => {
       `INSERT INTO messages (user_id, sender, admin_name, admin_picture, text, timestamp, admin_id, msg_type, file_url) VALUES (?, 'admin', ?, ?, ?, ?, ?, ?, ?)`,
       [userId, senderName, admin.pictureUrl, msgText, now, admin.userId, msgType, savedFileUrl]
     );
-    db.run(`UPDATE customers SET status = 'in_progress', last_update = ?, handled_by = COALESCE(handled_by, ?) WHERE user_id = ?`, [now, admin.userId, userId]);
+    db.run(`UPDATE customers SET status = 'in_progress', last_update = ? WHERE user_id = ?`, [now, userId]);
 
     io.emit('newMessage', { userId, sender: 'admin', adminName: senderName, adminPicture: admin.pictureUrl, text: msgText, timestamp: now, msgType, fileUrl: savedFileUrl });
     io.emit('updateCustomer', { userId, status: 'in_progress', last_update: now });
