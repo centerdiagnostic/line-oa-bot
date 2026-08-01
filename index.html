@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LINE OA Live Chat (Multi-Admin)</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; height: 100vh; display: flex; flex-direction: column; }
+        
+        .header { background: linear-gradient(135deg, #00c300, #009e00); color: white; padding: 12px 25px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header-brand { font-size: 1.15rem; font-weight: bold; display: flex; align-items: center; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .nav-btn { color: white; text-decoration: none; background: rgba(255,255,255,0.25); padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; transition: all 0.2s ease; display: inline-flex; align-items: center; border: 1px solid rgba(255,255,255,0.6); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .nav-btn:hover { background: rgba(255,255,255,0.4); border-color: white; transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.15); }
+        .admin-profile { display: flex; align-items: center; gap: 15px; font-size: 0.9rem; }
+        .admin-avatar { width: 40px; height: 40px; border-radius: 50%; background-size: cover; background-position: center; border: 2px solid rgba(255,255,255,0.9); box-shadow: 0 2px 5px rgba(0,0,0,0.15); }
+        .admin-info { display: flex; flex-direction: column; text-align: right; justify-content: center; }
+        .admin-role-label { font-size: 0.75rem; color: #e8f5e9; margin-bottom: 3px; }
+        .admin-name-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+        .admin-name { font-weight: bold; font-size: 1.05rem; color: white; text-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .edit-name-btn { font-size: 0.7rem; background: rgba(255,255,255,0.2); border: none; color: white; padding: 4px 10px; border-radius: 12px; cursor: pointer; transition: background 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .edit-name-btn:hover { background: rgba(255,255,255,0.3); }
+        .logout-btn { background: rgba(0,0,0,0.3); border-color: rgba(255,255,255,0.3); margin-left: 10px; }
+        .logout-btn:hover { background: rgba(0,0,0,0.4); border-color: rgba(255,255,255,0.5); }
+        
+        .app-container { display: flex; flex: 1; overflow: hidden; }
+        
+        .sidebar { width: 320px; background: white; border-right: 1px solid #ddd; overflow-y: auto; display: flex; flex-direction: column; }
+        .customer-item { padding: 12px 15px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; align-items: center; transition: background 0.2s; }
+        .customer-item:hover { background-color: #f9f9f9; }
+        .customer-item.active { background-color: #e6f7e6; border-left: 4px solid #00B900; }
+        .avatar { width: 45px; height: 45px; border-radius: 50%; background-color: #ccc; margin-right: 12px; background-size: cover; background-position: center; }
+        .customer-info { flex: 1; }
+        .customer-name { font-weight: bold; color: #333; font-size: 0.95rem; margin-bottom: 4px; }
+        
+        .status-badge { font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; color: white; display: inline-block; }
+        .status-pending { background-color: #dc3545; }
+        .status-in_progress { background-color: #ffc107; color: #333; }
+        .status-completed { background-color: #28a745; }
+
+        .chat-area { flex: 1; display: flex; flex-direction: column; background-color: #e5ddd5; }
+        .chat-header { background: white; padding: 10px 15px; border-bottom: 1px solid #ddd; display: flex; align-items: center; justify-content: space-between; }
+        .chat-header-info { display: flex; align-items: center; }
+        .read-info { font-size: 0.75rem; color: #666; margin-top: 2px; }
+        
+        .chat-messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        
+        .message-bubble { max-width: 75%; padding: 8px 12px; border-radius: 12px; line-height: 1.4; position: relative; word-wrap: break-word; font-size: 0.95rem; }
+        .msg-customer { background-color: white; align-self: flex-start; border-bottom-left-radius: 2px; }
+        .msg-admin { background-color: #d9fdd3; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .sender-tag { font-size: 0.7rem; color: #008000; font-weight: bold; margin-bottom: 3px; }
+        .msg-time { font-size: 0.65rem; color: #777; margin-top: 4px; text-align: right; }
+        
+        .chat-input-area { background: #f0f0f0; padding: 12px; display: flex; gap: 10px; }
+        .chat-input { flex: 1; padding: 10px 15px; border: none; border-radius: 20px; outline: none; font-size: 0.95rem; }
+        .send-btn { background-color: #00B900; color: white; border: none; padding: 8px 18px; border-radius: 20px; cursor: pointer; font-weight: bold; }
+        
+        .status-select { padding: 5px 10px; border-radius: 6px; border: 1px solid #ccc; font-size: 0.85rem; outline: none; }
+        
+        /* New Features CSS */
+        @keyframes flashRed { 0% { background-color: #ffe6e6; } 50% { background-color: #ffcccc; } 100% { background-color: #ffe6e6; } }
+        .sla-alert { animation: flashRed 1.5s infinite; border-left: 4px solid #dc3545 !important; }
+        .sidebar-header { padding: 10px 15px; background: #f9f9f9; border-bottom: 1px solid #ddd; }
+        .chat-filter { width: 100%; padding: 6px; border-radius: 4px; border: 1px solid #ccc; font-size: 0.85rem; }
+        .claim-btn { background: #ff9800; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: bold; margin-left: 10px; display: none; }
+        .handled-badge { font-size: 0.7rem; background: #17a2b8; color: white; padding: 2px 6px; border-radius: 10px; margin-left: 5px; }
+        .note-area { background: #fffde7; padding: 10px 15px; border-bottom: 1px solid #ddd; font-size: 0.85rem; display: none; flex-direction: column; }
+        .note-input { width: 100%; height: 50px; padding: 8px; border: 1px solid #eee; border-radius: 4px; resize: none; margin-bottom: 5px; background: transparent; font-family: inherit; }
+        .quick-reply-area { background: #f0f0f0; padding: 8px 15px; display: flex; gap: 8px; overflow-x: auto; white-space: nowrap; border-bottom: 1px solid #ddd; }
+        .qr-btn { background: white; border: 1px solid #ccc; padding: 6px 12px; border-radius: 15px; font-size: 0.8rem; cursor: pointer; color: #333; }
+        .qr-btn:hover { background: #e9ecef; }
+
+        @media (max-width: 768px) {
+            .app-container { flex-direction: column; }
+            .sidebar { width: 100%; flex: 1; }
+            .sidebar.hidden-mobile { display: none; }
+            .chat-area { display: none; flex: 1; }
+            .chat-area.active-mobile { display: flex; }
+            .back-btn { display: block; margin-right: 10px; cursor: pointer; background: none; border: none; font-size: 1.2rem; color: #00B900; }
+        }
+        @media (min-width: 769px) { .back-btn { display: none; } }
+        
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: white; padding: 20px; border-radius: 8px; width: 300px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .modal-input { width: 100%; padding: 8px; margin: 10px 0; border: 1px solid #ccc; border-radius: 4px; outline: none; }
+        .modal-btn-save { background: #00B900; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .modal-btn-cancel { background: #ccc; color: black; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; margin-left: 5px; font-weight: bold; }
+        
+        .read-by-tag { font-size: 0.7rem; color: #007bff; margin-top: 5px; display: none; background: #eef7ff; padding: 4px 8px; border-radius: 4px; display: none; }
+        
+        .alert-modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1001; }
+        .alert-modal-content { background: white; padding: 20px; border-radius: 8px; width: 300px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .alert-msg { margin-bottom: 15px; font-size: 0.95rem; color: #333; }
+        .alert-btn { background: #00B900; color: white; border: none; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div style="display: flex; align-items: center; gap: 20px;">
+            <div class="header-brand">💬 LINE OA Live Chat</div>
+            <div id="adminMenu" style="display: none; gap: 10px;">
+                <a href="/manage" class="nav-btn">👥 จัดการผู้ใช้</a>
+                <a href="/summary" class="nav-btn">📊 ดูสรุป</a>
+                <a href="/manage_qr" class="nav-btn">⚡ จัดการควิกแชท</a>
+            </div>
+            <div id="broadcastMenu" style="display: none; margin-left: 5px;">
+                <a href="/broadcast" class="nav-btn" style="background: rgba(255, 193, 7, 0.85); color: #333; border: 1px solid rgba(0,0,0,0.1);">📢 บรอดแคสต์</a>
+            </div>
+        </div>
+        <div class="admin-profile">
+            <div class="admin-info">
+                <div class="admin-role-label"><span id="myRoleTag"></span>ชื่อที่ใช้ตอบลูกค้าปัจจุบัน:</div>
+                <div class="admin-name-row">
+                    <div id="myName" class="admin-name">กำลังโหลด...</div>
+                    <button onclick="changeAdminName()" class="edit-name-btn">✏️ เปลี่ยนชื่อ</button>
+                </div>
+            </div>
+            <div class="admin-avatar" id="myAvatar"></div>
+            <a href="/logout" class="nav-btn logout-btn">ออกจากระบบ</a>
+        </div>
+    </div>
+    
+    <div class="app-container">
+        <div class="sidebar" id="sidebarContainer">
+            <div class="sidebar-header">
+                <select id="chatFilter" class="chat-filter" onchange="renderCustomerList()">
+                    <option value="all">🔍 แสดงแชททั้งหมด</option>
+                    <option value="pending">⏳ รอการตอบ (SLA)</option>
+                    <option value="my_chats">🙋‍♂️ แชทที่ฉันรับผิดชอบ</option>
+                </select>
+            </div>
+            <div id="sidebar" style="overflow-y: auto; flex: 1;"></div>
+        </div>
+
+        <div class="chat-area" id="chatArea">
+            <div class="chat-header">
+                <div class="chat-header-info">
+                    <button class="back-btn" onclick="backToList()">❮</button>
+                    <div class="avatar" id="currentAvatar" style="width: 35px; height: 35px;"></div>
+                    <div>
+                        <div style="display: flex; align-items: center;">
+                            <div id="currentName" style="font-weight: bold;">เลือกแชทเพื่อเริ่มสนทนา</div>
+                            <button id="claimBtn" class="claim-btn" onclick="claimChat()">รับเรื่อง</button>
+                        </div>
+                        <!-- ตรงนี้คือส่วนแสดงผลการเปิดอ่าน (Read Receipt) ปรับสีให้เห็นชัดขึ้น -->
+                        <div id="readInfo" class="read-info" style="color: #008000; font-weight: bold; margin-top: 3px;"></div>
+                    </div>
+                </div>
+                <div>
+                    <select id="statusSelect" class="status-select" onchange="changeStatus(this.value)" disabled>
+                        <option value="pending">🔴 รอการตอบ</option>
+                        <option value="in_progress">🟡 กำลังดำเนินการ</option>
+                        <option value="completed">🟢 เสร็จสิ้น</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="note-container" id="noteContainer" style="display: none; background: #fffde7; border-bottom: 1px solid #ddd; font-size: 0.85rem;">
+                <div onclick="toggleNote()" style="cursor: pointer; padding: 10px 15px; font-weight: bold; color: #f57f17; display: flex; justify-content: space-between; align-items: center;">
+                    <span>📝 โน้ตภายใน (กดเพื่อเปิด/ปิด)</span>
+                    <span id="noteToggleIcon">▼</span>
+                </div>
+                <div class="note-area" id="noteArea" style="padding: 0 15px 10px 15px; display: none; flex-direction: column; border-bottom: none;">
+                    <textarea id="internalNoteInput" class="note-input" placeholder="พิมพ์โน้ตส่งต่องานสำหรับเคสนี้..."></textarea>
+                    <button onclick="saveNote()" style="align-self: flex-end; background: #fbc02d; color: #333; border: none; padding: 6px 15px; border-radius: 4px; cursor: pointer; font-weight: bold;">บันทึกโน้ต</button>
+                </div>
+            </div>
+
+            <div class="chat-messages" id="chatMessages"></div>
+            
+            <div class="quick-reply-area" id="quickReplyArea" style="display: none;">
+                <!-- Quick replies will be loaded dynamically here -->
+                <div style="font-size: 0.8rem; color: #666; padding: 5px;">กำลังโหลดควิกแชท...</div>
+            </div>
+
+            <div class="chat-input-area">
+                <input type="file" id="imageInput" style="display: none;" accept="image/*, application/pdf" onchange="sendFile(event)">
+                <button id="attachBtn" class="send-btn" style="background-color: #6c757d; margin-right: 5px; padding: 8px 12px;" onclick="document.getElementById('imageInput').click()" disabled>📎</button>
+                <input type="text" id="messageInput" class="chat-input" placeholder="พิมพ์ข้อความ..." disabled onkeypress="handleEnter(event)">
+                <button id="sendBtn" class="send-btn" onclick="sendMessage()" disabled>ส่ง</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="nameModal">
+        <div class="modal-content">
+            <h3>ตั้งชื่อแอดมิน</h3>
+            <p style="font-size: 0.8rem; color: #666; margin-top: 5px;">ชื่อนี้จะแสดงให้ลูกค้าเห็นเมื่อคุณตอบกลับ</p>
+            <input type="text" id="newNameInput" class="modal-input" placeholder="พิมพ์ชื่อที่นี่...">
+            <div style="margin-top: 10px;">
+                <button class="modal-btn-save" onclick="saveAdminName()">บันทึก</button>
+                <button class="modal-btn-cancel" onclick="closeAdminNameModal()">ยกเลิก</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert-modal-overlay" id="appAlertModal">
+        <div class="alert-modal-content">
+            <div id="appAlertMessage" class="alert-msg">ข้อความแจ้งเตือน</div>
+            <button class="alert-btn" onclick="closeAppAlert()">ตกลง</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let currentUserId = null;
+        let customersData = [];
+        let myProfile = null;
+
+        async function loadMyProfile() {
+            const res = await fetch('/api/me');
+            myProfile = await res.json();
+            document.getElementById('myName').innerText = myProfile.customName || myProfile.displayName;
+            if(myProfile.pictureUrl) document.getElementById('myAvatar').style.backgroundImage = `url('${myProfile.pictureUrl}')`;
+            
+            // แสดงป้ายบอกสิทธิ์
+            const roleText = myProfile.role === 'admin' ? '[Admin] ' : '[Operator] ';
+            document.getElementById('myRoleTag').innerText = roleText;
+            
+            // แสดงเมนูจัดการเฉพาะ Admin
+            if (myProfile.role === 'admin') {
+                document.getElementById('adminMenu').style.display = 'flex';
+            }
+            if (myProfile.canBroadcast) {
+                document.getElementById('broadcastMenu').style.display = 'flex';
+                document.getElementById('broadcastMenu').innerHTML = `
+                    <a href="/manage_rich_msg" class="nav-btn" style="background: rgba(255, 152, 0, 0.85); color: #333; border: 1px solid rgba(0,0,0,0.1);">🎇 จัดการริชเมสเสจ</a>
+                    <a href="/broadcast" class="nav-btn" style="background: rgba(255, 193, 7, 0.85); color: #333; border: 1px solid rgba(0,0,0,0.1);">📢 บรอดแคสต์</a>
+                `;
+            }
+        }
+
+        function changeAdminName() {
+            const currentName = myProfile.customName || myProfile.displayName;
+            document.getElementById('newNameInput').value = currentName;
+            document.getElementById('nameModal').style.display = 'flex';
+        }
+
+        function closeAdminNameModal() {
+            document.getElementById('nameModal').style.display = 'none';
+        }
+
+        function showAppAlert(message) {
+            document.getElementById('appAlertMessage').innerText = message;
+            document.getElementById('appAlertModal').style.display = 'flex';
+        }
+
+        function closeAppAlert() {
+            document.getElementById('appAlertModal').style.display = 'none';
+        }
+
+        async function saveAdminName() {
+            const inputEl = document.getElementById('newNameInput');
+            if (!inputEl) return;
+            
+            const newName = inputEl.value.trim();
+            
+            if (newName === "") {
+                showAppAlert("⚠️ กรุณากรอกชื่อแอดมินก่อนกดบันทึก");
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/me/name', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ customName: newName })
+                });
+                
+                if (res.ok) {
+                    myProfile.customName = newName;
+                    document.getElementById('myName').innerText = newName; // อัปเดตชื่อใหม่ให้เห็นทันที
+                    closeAdminNameModal();
+                    showAppAlert("✅ เปลี่ยนชื่อสำเร็จ! ระบบกำลังใช้ชื่อ: " + newName);
+                } else {
+                    showAppAlert("❌ ไม่สามารถบันทึกชื่อได้ โปรดลองอีกครั้ง");
+                }
+            } catch (error) {
+                showAppAlert("❌ เกิดข้อผิดพลาดในการเชื่อมต่อ: " + error.message);
+            }
+        }
+
+        async function loadCustomers() {
+            const res = await fetch('/api/customers');
+            customersData = await res.json();
+            renderCustomerList();
+        }
+
+        function renderCustomerList() {
+            const sidebar = document.getElementById('sidebar');
+            sidebar.innerHTML = '';
+            
+            const filterValue = document.getElementById('chatFilter') ? document.getElementById('chatFilter').value : 'all';
+            const now = Date.now();
+
+            customersData.forEach(c => {
+                // กรองข้อมูล (Chat Filter)
+                if (filterValue === 'pending' && c.status !== 'pending') return;
+                if (filterValue === 'my_chats' && c.handled_by !== myProfile.userId) return;
+
+                let statusClass = 'status-pending';
+                let statusText = 'รอการตอบ';
+                if(c.status === 'in_progress') { statusClass = 'status-in_progress'; statusText = 'กำลังดำเนินการ'; }
+                if(c.status === 'completed') { statusClass = 'status-completed'; statusText = 'เสร็จสิ้น'; }
+
+                // ตรวจสอบ SLA (แชท pending ค้างเกิน 15 นาที)[cite: 2]
+                let slaAlertClass = '';
+                if (c.status === 'pending' && c.last_update) {
+                    const timeDiff = now - new Date(c.last_update).getTime();
+                    if (timeDiff > 15 * 60 * 1000) { // 15 นาที
+                        slaAlertClass = 'sla-alert';
+                    }
+                }
+
+                const isActive = currentUserId === c.user_id ? 'active' : '';
+                const avatarStyle = c.picture_url ? `background-image: url('${c.picture_url}');` : '';
+                const handledBadge = c.handled_by ? `<span class="handled-badge">รับเคสแล้ว</span>` : '';
+
+                const div = document.createElement('div');
+                div.className = `customer-item ${isActive} ${slaAlertClass}`;
+                div.onclick = () => selectCustomer(c);
+                div.innerHTML = `
+                    <div class="avatar" style="${avatarStyle}"></div>
+                    <div class="customer-info">
+                        <div class="customer-name">${c.display_name || 'ลูกค้า'}</div>
+                        <div>
+                            <span class="status-badge ${statusClass}">${statusText}</span>
+                            ${handledBadge}
+                        </div>
+                    </div>
+                `;
+                sidebar.appendChild(div);
+            });
+        }
+
+        async function selectCustomer(customer) {
+            currentUserId = customer.user_id;
+            document.getElementById('currentName').innerText = customer.display_name || 'ลูกค้า';
+            document.getElementById('currentAvatar').style.backgroundImage = customer.picture_url ? `url('${customer.picture_url}')` : 'none';
+            document.getElementById('messageInput').disabled = false;
+            document.getElementById('sendBtn').disabled = false;
+            document.getElementById('attachBtn').disabled = false;
+            document.getElementById('statusSelect').disabled = false;
+            document.getElementById('statusSelect').value = customer.status || 'pending';
+            
+            // แสดงเมนูใหม่
+            document.getElementById('quickReplyArea').style.display = 'flex';
+            document.getElementById('noteContainer').style.display = 'block';
+            document.getElementById('noteArea').style.display = 'none'; // พับโน้ตไว้ก่อนเสมอเมื่อเปลี่ยนแชท
+            document.getElementById('noteToggleIcon').innerText = '▼';
+            document.getElementById('internalNoteInput').value = customer.internal_note || '';
+
+            // ปุ่มรับเรื่อง
+            const claimBtn = document.getElementById('claimBtn');
+            if (customer.handled_by === myProfile.userId) {
+                claimBtn.style.display = 'none';
+                document.getElementById('currentName').innerHTML = (customer.display_name || 'ลูกค้า') + ' <span style="font-size:0.7rem; color:#17a2b8; margin-left:10px;">(คุณรับผิดชอบเคสนี้)</span>';
+            } else {
+                claimBtn.style.display = 'inline-block';
+            }
+
+            document.getElementById('sidebarContainer').classList.add('hidden-mobile');
+            document.getElementById('chatArea').classList.add('active-mobile');
+
+            // ทันทีที่คลิกแชท จะส่งชื่อไปอัปเดตสถานะการเปิดอ่าน
+            await fetch(`/api/customers/${currentUserId}/read`, { method: 'POST' });
+
+            const res = await fetch(`/api/messages/${currentUserId}`);
+            const messages = await res.json();
+            renderMessages(messages);
+            renderCustomerList();
+        }
+
+        function backToList() {
+            document.getElementById('sidebarContainer').classList.remove('hidden-mobile');
+            document.getElementById('chatArea').classList.remove('active-mobile');
+            currentUserId = null;
+            renderCustomerList();
+        }
+
+        async function claimChat() {
+            if(!currentUserId) return;
+            await fetch(`/api/customers/${currentUserId}/claim`, { method: 'POST' });
+            showAppAlert("✅ คุณได้รับเรื่องดูแลแชทนี้แล้ว");
+        }
+
+        function toggleNote() {
+            const noteArea = document.getElementById('noteArea');
+            const icon = document.getElementById('noteToggleIcon');
+            if (noteArea.style.display === 'none') {
+                noteArea.style.display = 'flex';
+                icon.innerText = '▲';
+            } else {
+                noteArea.style.display = 'none';
+                icon.innerText = '▼';
+            }
+        }
+
+        async function saveNote() {
+            if(!currentUserId) return;
+            const note = document.getElementById('internalNoteInput').value;
+            await fetch(`/api/customers/${currentUserId}/note`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ note: note })
+            });
+            const idx = customersData.findIndex(c => c.user_id === currentUserId);
+            if(idx > -1) customersData[idx].internal_note = note;
+            showAppAlert("📝 บันทึกโน้ตสำเร็จ");
+        }
+
+        function insertQR(text) {
+            const input = document.getElementById('messageInput');
+            input.value = text;
+            input.focus();
+        }
+
+        function toggleReadBy(msgId) {
+            const tag = document.getElementById(`read-tag-${msgId}`);
+            if (tag) {
+                tag.style.display = tag.style.display === 'block' ? 'none' : 'block';
+            }
+        }
+
+        function renderMessages(messages) {
+            const chatBox = document.getElementById('chatMessages');
+            chatBox.innerHTML = '';
+            
+            messages.forEach(msg => {
+                const div = document.createElement('div');
+                const isCustomer = msg.sender === 'customer';
+                div.className = `message-bubble ${isCustomer ? 'msg-customer' : 'msg-admin'}`;
+                
+                const timeStr = new Date(msg.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute:'2-digit' });
+                const senderTag = !isCustomer && msg.admin_name ? `<div class="sender-tag">👤 ตอบโดย: ${msg.admin_name}</div>` : '';
+                
+                let readByTag = '';
+                if (isCustomer) {
+                    const readByName = msg.read_by_name || 'ยังไม่มีคนอ่าน';
+                    readByTag = `<div class="read-by-tag" id="read-tag-${msg.id}">👁️ อ่านโดย: ${readByName}</div>`;
+                    div.style.cursor = 'pointer';
+                    div.onclick = () => toggleReadBy(msg.id);
+                }
+                
+                let contentHtml = `<div>${msg.text}</div>`;
+                if (msg.msg_type === 'image' && msg.file_url) {
+                    contentHtml = `<img src="${msg.file_url}" style="max-width: 250px; max-height: 250px; object-fit: contain; border-radius: 8px; margin-bottom: 5px; cursor: pointer;" onclick="window.open('${msg.file_url}', '_blank')">`;
+                } else if (msg.msg_type === 'file' && msg.file_url) {
+                    contentHtml = `<a href="${msg.file_url}" target="_blank" style="display: inline-block; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 8px; text-decoration: none; color: #333; font-weight: bold;">📄 เปิดดูไฟล์เอกสาร</a>`;
+                }
+
+                div.innerHTML = `
+                    ${senderTag}
+                    ${contentHtml}
+                    <div class="msg-time">${timeStr}</div>
+                    ${readByTag}
+                `;
+                chatBox.appendChild(div);
+            });
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            if (!text || !currentUserId) return;
+
+            input.value = '';
+            await fetch('/api/reply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: currentUserId, text: text, type: 'text' })
+            });
+        }
+
+        async function sendFile(event) {
+            const file = event.target.files[0];
+            if (!file || !currentUserId) return;
+            
+            const isPDF = file.type === 'application/pdf';
+            const msgType = isPDF ? 'file' : 'image';
+            const textMsg = isPDF ? '[ส่งไฟล์ PDF]' : '[ส่งรูปภาพ]';
+            
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const base64Data = e.target.result;
+                document.getElementById('imageInput').value = ''; 
+                
+                await fetch('/api/reply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        userId: currentUserId, 
+                        text: textMsg, 
+                        type: msgType,
+                        fileBase64: base64Data,
+                        fileName: file.name
+                    })
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function changeStatus(newStatus) {
+            if(!currentUserId) return;
+            await fetch(`/api/customers/${currentUserId}/status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+        }
+
+        function handleEnter(e) { if (e.key === 'Enter') sendMessage(); }
+
+        socket.on('newMessage', (msg) => {
+            if (currentUserId === msg.userId) {
+                const chatBox = document.getElementById('chatMessages');
+                const div = document.createElement('div');
+                const isCustomer = msg.sender === 'customer';
+                div.className = `message-bubble ${isCustomer ? 'msg-customer' : 'msg-admin'}`;
+                const timeStr = new Date(msg.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute:'2-digit' });
+                const senderTag = !isCustomer && msg.adminName ? `<div class="sender-tag">👤 ตอบโดย: ${msg.adminName}</div>` : '';
+                
+                let readByTag = '';
+                if (isCustomer) {
+                    const msgId = msg.id || Date.now();
+                    const readByName = msg.read_by_name || 'ยังไม่มีคนอ่าน';
+                    readByTag = `<div class="read-by-tag" id="read-tag-${msgId}">👁️ อ่านโดย: ${readByName}</div>`;
+                    div.style.cursor = 'pointer';
+                    div.onclick = () => toggleReadBy(msgId);
+                }
+                
+                let contentHtml = `<div>${msg.text}</div>`;
+                if (msg.msgType === 'image' && msg.fileUrl) {
+                    contentHtml = `<img src="${msg.fileUrl}" style="max-width: 250px; max-height: 250px; object-fit: contain; border-radius: 8px; margin-bottom: 5px; cursor: pointer;" onclick="window.open('${msg.fileUrl}', '_blank')">`;
+                } else if (msg.msgType === 'file' && msg.fileUrl) {
+                    contentHtml = `<a href="${msg.fileUrl}" target="_blank" style="display: inline-block; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 8px; text-decoration: none; color: #333; font-weight: bold;">📄 เปิดดูไฟล์เอกสาร</a>`;
+                }
+
+                div.innerHTML = `${senderTag}${contentHtml}<div class="msg-time">${timeStr}</div>${readByTag}`;
+                chatBox.appendChild(div);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        });
+
+        socket.on('updateReadStatus', (data) => {
+            if (currentUserId === data.userId) {
+                const timeStr = new Date(data.readAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute:'2-digit' });
+                document.getElementById('readInfo').innerText = `👁️ อ่านล่าสุดโดย ${data.readByName} (${timeStr})`;
+            }
+        });
+
+        socket.on('updateCustomer', (updatedData) => { loadCustomers(); });
+        socket.on('updateCustomerStatusOnly', (data) => {
+            const idx = customersData.findIndex(c => c.user_id === data.userId);
+            if(idx > -1) customersData[idx].status = data.status;
+            renderCustomerList();
+        });
+        socket.on('updateCustomerClaim', (data) => {
+            const idx = customersData.findIndex(c => c.user_id === data.userId);
+            if(idx > -1) {
+                customersData[idx].handled_by = data.handledBy;
+                if(currentUserId === data.userId) selectCustomer(customersData[idx]); // อัปเดตหน้าจอทันทีถ้าเปิดแชทนี้อยู่
+            }
+            renderCustomerList();
+        });
+        
+        // เช็ค SLA แจ้งเตือนกระพริบอัตโนมัติทุก 1 นาที
+        setInterval(renderCustomerList, 60000);
+
+        async function loadQuickReplies() {
+            try {
+                const res = await fetch('/api/quick_replies');
+                const qrData = await res.json();
+                const qrArea = document.getElementById('quickReplyArea');
+                qrArea.innerHTML = '';
+                
+                if(qrData.length === 0) {
+                    qrArea.innerHTML = '<div style="font-size: 0.8rem; color: #999; padding: 5px;">ยังไม่มีควิกแชท (ตั้งค่าได้ที่เมนูจัดการควิกแชท)</div>';
+                    return;
+                }
+                
+                qrData.forEach(qr => {
+                    const btn = document.createElement('button');
+                    btn.className = 'qr-btn';
+                    btn.innerText = qr.label;
+                    btn.onclick = () => insertQR(qr.message);
+                    qrArea.appendChild(btn);
+                });
+            } catch (err) {
+                console.error("Error loading quick replies", err);
+            }
+        }
+
+        loadMyProfile();
+        loadCustomers();
+        loadQuickReplies();
+    </script>
+</body>
+</html>
