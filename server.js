@@ -822,9 +822,9 @@ app.get('/api/summary_data', checkAuth, checkAdminRole, (req, res) => {
               // 6. สถิติรายแอดมิน (อิงตาม admin_id เพื่อรวมยอดทุกชื่อของคนเดียวกัน พร้อมคะแนนรีวิวเฉลี่ย)
               const statsQuery = `
                 SELECT 
-                  COALESCE(a.custom_name, a.display_name, m.admin_name) as admin_name, 
+                  COALESCE(MAX(a.custom_name), MAX(a.display_name), MAX(m.admin_name)) as admin_name, 
                   COUNT(m.id) as reply_count,
-                  (SELECT AVG(r.score) FROM ratings r WHERE r.admin_id = m.admin_id) as avg_rating
+                  (SELECT AVG(r.score) FROM ratings r WHERE r.admin_id = MAX(m.admin_id)) as avg_rating
                 FROM messages m 
                 LEFT JOIN admins a ON m.admin_id = a.user_id 
                 WHERE m.sender = 'admin' ` + dateConditionMsg.replace('timestamp', 'm.timestamp') + `
