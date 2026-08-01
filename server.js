@@ -65,7 +65,10 @@ const db = {
         const context = { lastID: res.rows[0]?.id || 0 };
         if (callback) callback.call(context, null);
       })
-      .catch(err => { if (callback) callback(err); });
+      .catch(err => {
+        console.error('DB Run Error:', err.message, 'SQL:', pgSql);
+        if (callback) callback(err);
+      });
   },
   get: (sql, params, callback) => {
     if (typeof params === 'function') { callback = params; params = []; }
@@ -73,15 +76,21 @@ const db = {
     let pgSql = sql.replace(/\?/g, () => `$${++i}`);
     pool.query(pgSql, params || [])
       .then(res => callback(null, res.rows[0]))
-      .catch(err => callback(err, null));
+      .catch(err => {
+        console.error('DB Get Error:', err.message, 'SQL:', pgSql);
+        if (callback) callback(err, null);
+      });
   },
   all: (sql, params, callback) => {
     if (typeof params === 'function') { callback = params; params = []; }
     let i = 0;
     let pgSql = sql.replace(/\?/g, () => `$${++i}`);
     pool.query(pgSql, params || [])
-      .then(res => callback(null, res.rows))
-      .catch(err => callback(err, null));
+      .then(res => callback(null, res.rows || []))
+      .catch(err => {
+        console.error('DB All Error:', err.message, 'SQL:', pgSql);
+        if (callback) callback(err, []);
+      });
   }
 };
 
@@ -183,13 +192,13 @@ app.get('/auth/line/callback', async (req, res) => {
     const getAdmin = () => new Promise(resolve => db.get(`SELECT custom_name, role, can_broadcast FROM admins WHERE user_id = ?`, [profile.userId], (err, row) => resolve(row)));
     let row = await getAdmin();
     let currentRole = 'pending'; // เปลี่ยนค่าเริ่มต้นเป็นรอการอนุมัติ
-    let canBroadcast = 0;
+    let canBroadcast = false;
     
     if (!row) {
       // ตรวจสอบว่าเป็นแอดมินคนแรกที่ระบุใน .env หรือไม่
       if (process.env.FIRST_ADMIN_USER_ID && profile.userId === process.env.FIRST_ADMIN_USER_ID) {
         currentRole = 'admin';
-        canBroadcast = 1; // แอดมินคนแรกได้สิทธิ์บรอดแคสต์อัตโนมัติ
+        canBroadcast = true; // แอดมินคนแรกได้สิทธิ์บรอดแคสต์อัตโนมัติ
       }
       db.run(
         `INSERT INTO admins (user_id, display_name, picture_url, custom_name, role, can_broadcast) VALUES (?, ?, ?, NULL, ?, ?)`,
@@ -197,7 +206,7 @@ app.get('/auth/line/callback', async (req, res) => {
       );
     } else {
       currentRole = row.role || 'pending';
-      canBroadcast = row.can_broadcast || 0;
+      canBroadcast = Boolean(row.can_broadcast);
       db.run(
         `UPDATE admins SET display_name=?, picture_url=? WHERE user_id=?`,
         [profile.displayName, profile.pictureUrl, profile.userId]
@@ -1519,12 +1528,13 @@ app.delete('/api/quick_replies/:id', checkAuth, checkAdminRole, (req, res) => {
 });
 
 app.get('/api/users', checkAuth, checkAdminRole, (req, res) => {
-  db.all("SELECT user_id, display_name, picture_url, custom_name, role, can_broadcast FROM admins", [], (err, rows) => res.json(rows));
+  db.all("SELECT user_id, display_name, picture_url, custom_name, role, can_broadcast FROM admins", [], (err, rows) => res.json(rows || []));
 });
 
 app.post('/api/users/role', checkAuth, checkAdminRole, (req, res) => {
   const { userId, role, canBroadcast } = req.body;
-  db.run("UPDATE admins SET role = ?, can_broadcast = ? WHERE user_id = ?", [role, canBroadcast, userId], (err) => {
+  const isBroadcast = canBroadcast === 1 || canBroadcast === true || canBroadcast === '1';
+  db.run("UPDATE admins SET role = ?, can_broadcast = ? WHERE user_id = ?", [role, isBroadcast, userId], (err) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ success: true });
   });
