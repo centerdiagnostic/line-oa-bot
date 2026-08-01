@@ -57,12 +57,12 @@ const db = {
     if (typeof params === 'function') { callback = params; params = []; }
     let i = 0;
     let pgSql = sql.replace(/\?/g, () => `$${++i}`);
-    if (pgSql.trim().toUpperCase().startsWith('INSERT') && !pgSql.includes('ON CONFLICT')) {
-      pgSql += ' RETURNING id';
+    if (pgSql.trim().toUpperCase().startsWith('INSERT') && !pgSql.toUpperCase().includes('RETURNING')) {
+      pgSql += ' RETURNING *';
     }
     pool.query(pgSql, params || [])
       .then(res => {
-        const context = { lastID: res.rows[0]?.id || 0 };
+        const context = { lastID: res.rows[0]?.id || res.rows[0]?.user_id || 0 };
         if (callback) callback.call(context, null);
       })
       .catch(err => {
