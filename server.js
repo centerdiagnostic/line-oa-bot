@@ -94,6 +94,63 @@ const db = {
   }
 };
 
+// สร้างตารางทั้งหมดใน Supabase อัตโนมัติหากยังไม่มี
+pool.query(`
+  CREATE TABLE IF NOT EXISTS admins (
+    user_id TEXT PRIMARY KEY,
+    display_name TEXT,
+    picture_url TEXT,
+    custom_name TEXT,
+    role TEXT DEFAULT 'admin',
+    can_broadcast BOOLEAN DEFAULT false
+  );
+  CREATE TABLE IF NOT EXISTS customers (
+    user_id TEXT PRIMARY KEY,
+    display_name TEXT,
+    picture_url TEXT,
+    status TEXT DEFAULT 'pending',
+    last_update TIMESTAMPTZ,
+    read_by_name TEXT,
+    read_at TIMESTAMPTZ,
+    handled_by TEXT,
+    internal_note TEXT,
+    rating INTEGER
+  );
+  CREATE TABLE IF NOT EXISTS messages (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT,
+    sender TEXT,
+    admin_name TEXT,
+    admin_picture TEXT,
+    text TEXT,
+    timestamp TIMESTAMPTZ,
+    read_by_name TEXT,
+    admin_id TEXT,
+    msg_type TEXT DEFAULT 'text',
+    file_url TEXT
+  );
+  CREATE TABLE IF NOT EXISTS quick_replies (
+    id SERIAL PRIMARY KEY,
+    label TEXT,
+    message TEXT
+  );
+  CREATE TABLE IF NOT EXISTS ratings (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT,
+    admin_id TEXT,
+    score INTEGER,
+    timestamp TIMESTAMPTZ
+  );
+  CREATE TABLE IF NOT EXISTS rich_messages (
+    id SERIAL PRIMARY KEY,
+    name TEXT,
+    image_url TEXT,
+    action_type TEXT DEFAULT 'link',
+    action_value TEXT
+  );
+`).then(() => console.log('✅ Supabase Tables Initialized Successfully'))
+  .catch(err => console.error('❌ Table Init Error:', err.message));
+
 function checkAuth(req, res, next) {
   if (!req.session || !req.session.admin) {
     return res.redirect('/login');
