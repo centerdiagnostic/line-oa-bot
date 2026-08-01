@@ -145,7 +145,9 @@ app.get('/login', (req, res) => {
 });
 
 app.get('/auth/line', (req, res) => {
-  const redirectUri = encodeURIComponent(`http://localhost:${port}/auth/line/callback`);
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.get('host');
+  const redirectUri = encodeURIComponent(`${protocol}://${host}/auth/line/callback`);
   const lineAuthUrl = `https://access.line.me/oauth2/v2.1/authorize?response_type=code&client_id=${process.env.LINE_LOGIN_CHANNEL_ID}&redirect_uri=${redirectUri}&state=12345&scope=profile%20openid`;
   res.redirect(lineAuthUrl);
 });
@@ -154,6 +156,10 @@ app.get('/auth/line/callback', async (req, res) => {
   const code = req.query.code;
   if (!code) return res.send('เกิดข้อผิดพลาด');
 
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.get('host');
+  const callbackUrl = `${protocol}://${host}/auth/line/callback`;
+
   try {
     const tokenRes = await fetch('https://api.line.me/oauth2/v2.1/token', {
       method: 'POST',
@@ -161,7 +167,7 @@ app.get('/auth/line/callback', async (req, res) => {
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code: code,
-        redirect_uri: `http://localhost:${port}/auth/line/callback`,
+        redirect_uri: callbackUrl,
         client_id: process.env.LINE_LOGIN_CHANNEL_ID,
         client_secret: process.env.LINE_LOGIN_CHANNEL_SECRET
       })
