@@ -257,12 +257,20 @@ app.get('/auth/line/callback', async (req, res) => {
         `INSERT INTO admins (user_id, display_name, picture_url, custom_name, role, can_broadcast) 
          VALUES (?, ?, ?, NULL, ?, ?) 
          ON CONFLICT (user_id) DO UPDATE SET display_name=EXCLUDED.display_name, picture_url=EXCLUDED.picture_url, role=EXCLUDED.role, can_broadcast=EXCLUDED.can_broadcast`,
-        [profile.userId, profile.displayName, profile.pictureUrl, currentRole, canBroadcast]
+        [profile.userId, profile.displayName, profile.pictureUrl, currentRole, canBroadcast],
+        function(err) {
+          if (err) console.error('❌ Insert admin failed:', profile.userId, err.message);
+          else console.log('✅ Admin inserted/updated:', profile.userId, currentRole);
+        }
       );
     } else {
       db.run(
         `UPDATE admins SET display_name=?, picture_url=?, role=?, can_broadcast=? WHERE user_id=?`,
-        [profile.displayName, profile.pictureUrl, currentRole, canBroadcast, profile.userId]
+        [profile.displayName, profile.pictureUrl, currentRole, canBroadcast, profile.userId],
+        function(err) {
+          if (err) console.error('❌ Update admin failed:', profile.userId, err.message);
+          else console.log('✅ Admin updated:', profile.userId, currentRole);
+        }
       );
     }
 
