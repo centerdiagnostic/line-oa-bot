@@ -7,6 +7,18 @@ const path = require('path');
 const http = require('http');
 const { Server } = require('socket.io');
 const session = require('express-session');
+const webpush = require('web-push');
+
+// ตั้งค่า VAPID Key สำหรับ Push Notification (อ่านจาก .env เท่านั้น ห้าม Hardcode)
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    'mailto:admin@example.com',
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+} else {
+  console.warn('⚠️ ยังไม่ได้ตั้งค่า VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY ใน .env — Push Notification จะไม่ทำงาน');
+}
 
 dotenv.config();
 
@@ -148,6 +160,14 @@ pool.query(`
     action_type TEXT DEFAULT 'link',
     action_value TEXT
   );
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id SERIAL PRIMARY KEY,
+    admin_id TEXT REFERENCES admins(user_id) ON DELETE CASCADE,
+    endpoint TEXT UNIQUE NOT NULL,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  );
 `).then(() => console.log('✅ Supabase Tables Initialized Successfully'))
   .catch(err => console.error('❌ Table Init Error:', err.message));
 
@@ -165,6 +185,56 @@ function checkAuth(req, res, next) {
 function checkAdminRole(req, res, next) {
   if (req.session && req.session.admin && req.session.admin.role === 'admin') next();
   else res.status(403).send('ไม่มีสิทธิ์เข้าถึงหน้านี้ (เฉพาะ Admin)');
+}
+
+// ----------------- Push Notification API -----------------
+app.get('/api/push/vapid-public-key', checkAuth, (req, res) => {
+  res.json({ publicKey: process.env.VAPID_PUBLIC_KEY || '' });
+});
+
+app.post('/api/push/subscribe', checkAuth, express.json(), async (req, res) => {
+  try {
+    const { endpoint, keys } = req.body;
+    if (!endpoint || !keys || !keys.p256dh || !keys.auth) {
+      return res.status(400).json({ error: 'ข้อมูล subscription ไม่ครบ' });
+    }
+    const adminId = req.session.admin.userId;
+    await pool.query(
+      `INSERT INTO push_subscriptions (admin_id, endpoint, p256dh, auth)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (endpoint) DO UPDATE SET admin_id = $1, p256dh = $3, auth = $4`,
+      [adminId, endpoint, keys.p256dh, keys.auth]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Push subscribe error:', err.message);
+    res.status(500).json({ error: 'บันทึก subscription ไม่สำเร็จ' });
+  }
+});
+
+// ฟังก์ชันกลางไว้ยิง Push ไปหาแอดมินทุกคนที่สมัครรับไว้
+async function sendPushToAllAdmins(title, body, url) {
+  if (!process.env.VAPID_PUBLIC_KEY) return;
+  try {
+    const { rows } = await pool.query('SELECT * FROM push_subscriptions');
+    const payload = JSON.stringify({ title, body, url });
+    for (const sub of rows) {
+      const subscription = {
+        endpoint: sub.endpoint,
+        keys: { p256dh: sub.p256dh, auth: sub.auth }
+      };
+      webpush.sendNotification(subscription, payload).catch(async (err) => {
+        // ถ้า subscription หมดอายุ/ถูกยกเลิกจากฝั่ง browser ให้ลบทิ้งจาก DB
+        if (err.statusCode === 410 || err.statusCode === 404) {
+          await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [sub.endpoint]);
+        } else {
+          console.error('Push send error:', err.message);
+        }
+      });
+    }
+  } catch (err) {
+    console.error('sendPushToAllAdmins error:', err.message);
+  }
 }
 
 // เพิ่ม Route สำหรับหน้า รออนุมัติ
@@ -299,6 +369,7 @@ const fs = require('fs');
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
 app.use('/uploads', express.static(uploadsDir));
+app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json({limit: '50mb'}));
 app.use(express.urlencoded({extended: true, limit: '50mb'}));
 
@@ -373,6 +444,10 @@ async function handleEvent(event) {
     db.run(`INSERT INTO messages (user_id, sender, text, timestamp, msg_type, file_url) VALUES (?, 'customer', ?, ?, ?, ?)`, [userId, text, now, msgType, savedFileUrl], function(err) {
       io.emit('newMessage', { id: this.lastID, userId, sender: 'customer', text, timestamp: now, msgType: msgType, fileUrl: savedFileUrl });
       io.emit('updateCustomer', { userId, displayName: profile.displayName, pictureUrl: profile.pictureUrl, status: 'pending', last_update: now });
+
+      // แจ้งเตือน Push ไปหาแอดมินทุกคนเมื่อลูกค้าทักเข้ามาใหม่
+      const pushBody = msgType === 'text' ? text : '📎 ส่งไฟล์/รูปภาพมาให้';
+      sendPushToAllAdmins(`💬 ${profile.displayName || 'ลูกค้า'}`, pushBody, '/dashboard');
     });
     return Promise.resolve(null);
   } catch (err) { console.error(err); return Promise.resolve(null); }

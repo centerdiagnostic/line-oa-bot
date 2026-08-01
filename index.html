@@ -4,6 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>LINE OA Live Chat (Multi-Admin)</title>
+
+    <!-- PWA: ทำให้เปิดแบบเต็มจอ ไม่มี URL bar เมื่อ Add to Home Screen -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#00B900">
+
+    <!-- รองรับ iOS Safari (Apple ไม่อ่าน manifest.json เต็มรูปแบบ ต้องใส่ meta เพิ่ม) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="OA Chat">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
@@ -224,6 +234,50 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
+
+        // ===== PWA Push Notification =====
+        async function subscribeToPush() {
+            try {
+                if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                    console.log('เบราว์เซอร์นี้ไม่รองรับ Push Notification');
+                    return;
+                }
+                const reg = await navigator.serviceWorker.register('/service-worker.js');
+
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    console.log('ผู้ใช้ไม่อนุญาตให้แจ้งเตือน');
+                    return;
+                }
+
+                const res = await fetch('/api/push/vapid-public-key');
+                const { publicKey } = await res.json();
+
+                const urlBase64ToUint8Array = (base64String) => {
+                    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+                    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+                    const rawData = atob(base64);
+                    return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+                };
+
+                let subscription = await reg.pushManager.getSubscription();
+                if (!subscription) {
+                    subscription = await reg.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: urlBase64ToUint8Array(publicKey)
+                    });
+                }
+
+                await fetch('/api/push/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(subscription)
+                });
+                console.log('✅ สมัครรับ Push Notification สำเร็จ');
+            } catch (err) {
+                console.error('Push subscribe error:', err);
+            }
+        }
         let currentUserId = null;
         let customersData = [];
         let myProfile = null;
@@ -616,6 +670,7 @@
         loadMyProfile();
         loadCustomers();
         loadQuickReplies();
+        subscribeToPush();
     </script>
 </body>
 </html>

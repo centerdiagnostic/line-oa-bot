@@ -1,0 +1,25 @@
+{
+  "name": "LINE OA Live Chat - Admin",
+  "short_name": "OA Chat",
+  "description": "ระบบแชทแอดมิน LINE OA สำหรับตอบลูกค้าและติดตามงาน",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f0f2f5",
+  "theme_color": "#00B900",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
