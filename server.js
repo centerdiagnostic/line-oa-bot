@@ -182,6 +182,11 @@ function checkAuth(req, res, next) {
   next();
 }
 
+// เพิ่ม Route หน้าแรกสุด ให้เด้งไปหน้า Dashboard อัตโนมัติ (ถ้ายังไม่ login จะโดน checkAuth เด้งไป /login ต่อเองอีกที)
+app.get('/', (req, res) => {
+  res.redirect('/dashboard');
+});
+
 function checkAdminRole(req, res, next) {
   if (req.session && req.session.admin && req.session.admin.role === 'admin') next();
   else res.status(403).send('ไม่มีสิทธิ์เข้าถึงหน้านี้ (เฉพาะ Admin)');
