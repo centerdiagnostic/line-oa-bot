@@ -248,25 +248,21 @@ app.get('/auth/line/callback', async (req, res) => {
     // ตรวจสอบข้อมูลสิทธิ์และชื่อแอดมิน
     const getAdmin = () => new Promise(resolve => db.get(`SELECT custom_name, role, can_broadcast FROM admins WHERE user_id = ?`, [profile.userId], (err, row) => resolve(row)));
     let row = await getAdmin();
-    let currentRole = 'pending'; // เปลี่ยนค่าเริ่มต้นเป็นรอการอนุมัติ
-    let canBroadcast = false;
+    const isFirstAdmin = process.env.FIRST_ADMIN_USER_ID && profile.userId === process.env.FIRST_ADMIN_USER_ID;
+    let currentRole = isFirstAdmin ? 'admin' : (row ? (row.role || 'pending') : 'pending');
+    let canBroadcast = isFirstAdmin ? true : (row ? Boolean(row.can_broadcast) : false);
     
     if (!row) {
-      // ตรวจสอบว่าเป็นแอดมินคนแรกที่ระบุใน .env หรือไม่
-      if (process.env.FIRST_ADMIN_USER_ID && profile.userId === process.env.FIRST_ADMIN_USER_ID) {
-        currentRole = 'admin';
-        canBroadcast = true; // แอดมินคนแรกได้สิทธิ์บรอดแคสต์อัตโนมัติ
-      }
       db.run(
-        `INSERT INTO admins (user_id, display_name, picture_url, custom_name, role, can_broadcast) VALUES (?, ?, ?, NULL, ?, ?)`,
+        `INSERT INTO admins (user_id, display_name, picture_url, custom_name, role, can_broadcast) 
+         VALUES (?, ?, ?, NULL, ?, ?) 
+         ON CONFLICT (user_id) DO UPDATE SET display_name=EXCLUDED.display_name, picture_url=EXCLUDED.picture_url, role=EXCLUDED.role, can_broadcast=EXCLUDED.can_broadcast`,
         [profile.userId, profile.displayName, profile.pictureUrl, currentRole, canBroadcast]
       );
     } else {
-      currentRole = row.role || 'pending';
-      canBroadcast = Boolean(row.can_broadcast);
       db.run(
-        `UPDATE admins SET display_name=?, picture_url=? WHERE user_id=?`,
-        [profile.displayName, profile.pictureUrl, profile.userId]
+        `UPDATE admins SET display_name=?, picture_url=?, role=?, can_broadcast=? WHERE user_id=?`,
+        [profile.displayName, profile.pictureUrl, currentRole, canBroadcast, profile.userId]
       );
     }
 
