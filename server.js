@@ -469,7 +469,6 @@ async function handleEvent(event) {
       const { data, error } = await supabase.storage.from('uploads').upload(filename, buffer, {
         contentType: ext === 'pdf' ? 'application/pdf' : 'image/jpeg'
       });
-      if (upErr) throw new Error('อัปโหลดไฟล์ไม่สำเร็จ: ' + upErr.message);
       if (error) {
         // อัปโหลดพัง: ไม่ทิ้งข้อความ แต่บันทึกเป็นข้อความแจ้งเตือนแทน เพื่อให้แอดมินรู้ว่ามีคนส่งไฟล์มา
         console.error('❌ อัปโหลดไฟล์ขาเข้าไม่สำเร็จ:', error.message);
