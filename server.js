@@ -642,7 +642,7 @@ app.get('/summary', checkAuth, checkAdminRole, (req, res) => {
         .card-label { font-size: 0.85rem; color: #666; font-weight: 500; }
         .info-panel { background: white; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); padding: 30px; margin-bottom: 30px; }
         .info-panel h2 { margin-top: 0; color: #444; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; font-size: 1.1rem; }
-        .chart-container { max-width: 450px; margin: 0 auto 20px auto; }
+        .chart-container { max-width: 420px; height: 420px; margin: 0 auto 20px auto; position: relative; }
         table { width: 100%; border-collapse: collapse; text-align: left; }
         th { background-color: #f8f9fa; color: #555; padding: 12px 15px; border-bottom: 2px solid #ddd; font-size: 0.95rem; }
         td { padding: 12px 15px; border-bottom: 1px solid #eee; }
@@ -841,8 +841,17 @@ app.get('/summary', checkAuth, checkAdminRole, (req, res) => {
                 },
                 options: {
                   responsive: true,
+                  maintainAspectRatio: true,
+                  devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
                   plugins: {
-                    legend: { position: 'bottom' }
+                    legend: {
+                      position: 'bottom',
+                      labels: { font: { size: 14, family: "'Sarabun', 'Segoe UI', sans-serif" } }
+                    },
+                    tooltip: {
+                      titleFont: { size: 14, family: "'Sarabun', 'Segoe UI', sans-serif" },
+                      bodyFont: { size: 14, family: "'Sarabun', 'Segoe UI', sans-serif" }
+                    }
                   }
                 }
               });
