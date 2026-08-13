@@ -469,7 +469,7 @@ async function handleEvent(event) {
       const { data, error } = await supabase.storage.from('uploads').upload(filename, buffer, {
         contentType: ext === 'pdf' ? 'application/pdf' : 'image/jpeg'
       });
-      
+      if (upErr) throw new Error('อัปโหลดไฟล์ไม่สำเร็จ: ' + upErr.message);
       if (error) throw error;
       const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(filename);
       
@@ -1296,7 +1296,7 @@ app.post('/api/rich_messages', checkAuth, checkBroadcastRole, async (req, res) =
   const filename = `rm_${Date.now()}.${ext}`;
   const buffer = Buffer.from(base64Data, 'base64');
   
-  await supabase.storage.from('uploads').upload(filename, buffer, {
+  const { error: rmErr } = await supabase.storage.from('uploads').upload(filename, buffer, {
     contentType: `image/${ext}`
   });
   
@@ -1494,10 +1494,10 @@ app.post('/api/reply', checkAuth, async (req, res) => {
       const generatedName = isPdf ? `file_${Date.now()}.${ext}` : `img_${Date.now()}.${ext}`;
       const buffer = Buffer.from(base64Data, 'base64');
       
-      await supabase.storage.from('uploads').upload(generatedName, buffer, {
+      const { error: upErr } = await supabase.storage.from('uploads').upload(generatedName, buffer, {
         contentType: isPdf ? 'application/pdf' : `image/${ext}`
       });
-      
+      if (upErr) throw new Error('อัปโหลดไฟล์ไม่สำเร็จ: ' + upErr.message);
       const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(generatedName);
       const secureUrl = publicUrlData.publicUrl;
       
