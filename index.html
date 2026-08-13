@@ -538,11 +538,30 @@
             if (!text || !currentUserId) return;
 
             input.value = '';
-            await fetch('/api/reply', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: currentUserId, text: text, type: 'text' })
-            });
+            try {
+                const res = await fetch('/api/reply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: currentUserId, text: text, type: 'text' }),
+                    redirect: 'manual'
+                });
+
+                if (res.type === 'opaqueredirect' || res.status === 401 || res.status === 302) {
+                    alert('⚠️ เซสชันหมดอายุ กรุณาล็อกอินใหม่');
+                    input.value = text;
+                    window.location.href = '/login';
+                    return;
+                }
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ error: 'HTTP ' + res.status }));
+                    alert('❌ ส่งไม่สำเร็จ: ' + (err.error || 'ไม่ทราบสาเหตุ'));
+                    input.value = text;
+                    return;
+                }
+            } catch (e) {
+                alert('❌ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้: ' + e.message);
+                input.value = text;
+            }
         }
 
         async function sendFile(event) {

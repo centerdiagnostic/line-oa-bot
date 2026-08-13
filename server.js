@@ -47,7 +47,9 @@ const server = http.createServer(app);
 const io = new Server(server);
 const port = process.env.PORT || 3000;
 
+const pgSession = require('connect-pg-simple')(session);
 app.use(session({
+  store: new pgSession({ pool: pool, tableName: 'user_sessions', createTableIfMissing: true }),
   secret: process.env.SESSION_SECRET || 'secret_key',
   resave: false,
   saveUninitialized: false,
@@ -1571,6 +1573,7 @@ app.post('/api/reply', checkAuth, async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
+    console.error('❌ Reply Error:', err.statusCode || '', err.message, err.originalError?.response?.data || '');
     res.status(500).json({ error: err.message });
   }
 });
