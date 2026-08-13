@@ -410,8 +410,19 @@ async function handleEvent(event) {
           const now = new Date().toISOString();
           // อัปเดตสถานะใน customers ว่ารอบนี้ประเมินแล้ว เพื่อล็อคไม่ให้กดซ้ำ
           db.run(`UPDATE customers SET rating = ? WHERE user_id = ?`, [score, event.source.userId]);
+
+          // หาเจ้าของคะแนน: ถ้าไม่มีคนกดรับเรื่อง ให้ใช้แอดมินคนล่าสุดที่ตอบลูกค้าคนนี้แทน
+          const ownerId = await new Promise(resolve => {
+            if (row && row.handled_by) return resolve(row.handled_by);
+            db.get(
+              `SELECT admin_id FROM messages WHERE user_id = ? AND sender = 'admin' AND admin_id IS NOT NULL ORDER BY timestamp DESC LIMIT 1`,
+              [event.source.userId],
+              (e, last) => resolve(last ? last.admin_id : null)
+            );
+          });
+
           // บันทึกคะแนนลงตาราง ratings เพื่อเก็บประวัติทุกรอบแยกกันโดยไม่ทับของเดิม
-          db.run(`INSERT INTO ratings (user_id, admin_id, score, timestamp) VALUES (?, ?, ?, ?)`, [event.source.userId, row.handled_by, score, now]);
+          db.run(`INSERT INTO ratings (user_id, admin_id, score, timestamp) VALUES (?, ?, ?, ?)`, [event.source.userId, ownerId, score, now]);
           
           await client.replyMessage({
             replyToken: event.replyToken,
@@ -895,7 +906,7 @@ app.get('/api/summary_data', checkAuth, checkAdminRole, (req, res) => {
   let dateParamMsg = [];
   
   if (date) {
-    dateConditionMsg = " AND date(timestamp) = ?";
+    dateConditionMsg = " AND date(timestamp AT TIME ZONE 'Asia/Bangkok') = ?";
     dateParamMsg.push(date);
   }
 
@@ -939,7 +950,8 @@ app.get('/api/summary_data', checkAuth, checkAdminRole, (req, res) => {
                 SELECT 
                   COALESCE(a.custom_name, a.display_name, m.admin_name) as admin_name, 
                   COUNT(m.id) as reply_count,
-                  (SELECT AVG(r.score) FROM ratings r WHERE r.admin_id = m.admin_id) as avg_rating
+                  (SELECT AVG(r.score) FROM ratings r WHERE r.admin_id = m.admin_id
+                    ${date ? "AND date(r.timestamp) = '" + date.replace(/[^0-9-]/g, '') + "'" : ""}) as avg_rating
                 FROM messages m 
                 LEFT JOIN admins a ON m.admin_id = a.user_id 
                 WHERE m.sender = 'admin' ` + dateConditionMsg.replace('timestamp', 'm.timestamp') + `
