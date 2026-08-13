@@ -203,6 +203,7 @@
 
             <div class="chat-input-area">
                 <input type="file" id="imageInput" style="display: none;" accept="image/*, application/pdf" onchange="sendFile(event)">
+                <button id="stickerBtn" class="send-btn" style="background-color: #ffc107; margin-right: 5px; padding: 8px 12px;" onclick="toggleStickerPanel()" disabled>😊</button>
                 <button id="attachBtn" class="send-btn" style="background-color: #6c757d; margin-right: 5px; padding: 8px 12px;" onclick="document.getElementById('imageInput').click()" disabled>📎</button>
                 <input type="text" id="messageInput" class="chat-input" placeholder="พิมพ์ข้อความ..." disabled onkeypress="handleEnter(event)">
                 <button id="sendBtn" class="send-btn" onclick="sendMessage()" disabled>ส่ง</button>
@@ -412,6 +413,7 @@
             document.getElementById('messageInput').disabled = false;
             document.getElementById('sendBtn').disabled = false;
             document.getElementById('attachBtn').disabled = false;
+            document.getElementById('stickerBtn').disabled = false;
             document.getElementById('statusSelect').disabled = false;
             document.getElementById('statusSelect').value = customer.status || 'pending';
             
@@ -604,6 +606,57 @@
         }
 
         function handleEnter(e) { if (e.key === 'Enter') sendMessage(); }
+
+        // ชุดสติกเกอร์พื้นฐานของ LINE ที่ Messaging API ส่งได้
+        const STICKER_SETS = [
+            { packageId: '446', name: 'Brown & Cony', ids: ['1988','1989','1990','1991','1992','1993','1994','1995','1996','1997','1998','1999','2000','2001','2002','2003','2004','2005','2006','2007','2008','2009','2010','2011'] },
+            { packageId: '789', name: 'Sally',        ids: ['10855','10856','10857','10858','10859','10860','10861','10862','10863','10864','10865','10866','10867','10868','10869','10870','10871','10872','10873','10874','10875','10876','10877','10878'] },
+            { packageId: '1070', name: 'Moon',        ids: ['17839','17840','17841','17842','17843','17844','17845','17846','17847','17848','17849','17850','17851','17852','17853','17854','17855','17856','17857','17858','17859','17860','17861','17862'] }
+        ];
+
+        function toggleStickerPanel() {
+            let panel = document.getElementById('stickerPanel');
+            if (panel) { panel.remove(); return; }
+
+            panel = document.createElement('div');
+            panel.id = 'stickerPanel';
+            panel.style.cssText = 'position:absolute; bottom:70px; right:20px; width:340px; max-height:320px; overflow-y:auto; background:#fff; border:1px solid #ddd; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,0.15); padding:12px; z-index:999;';
+
+            let html = '';
+            STICKER_SETS.forEach(set => {
+                html += `<div style="font-weight:bold; font-size:0.85rem; color:#666; margin:8px 0 6px;">${set.name}</div>`;
+                html += '<div style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px;">';
+                set.ids.forEach(id => {
+                    html += `<img src="https://stickershop.line-scdn.net/stickershop/v1/sticker/${id}/android/sticker.png"
+                                  style="width:100%; cursor:pointer; border-radius:6px;"
+                                  onclick="sendSticker('${set.packageId}','${id}')">`;
+                });
+                html += '</div>';
+            });
+            panel.innerHTML = html;
+            document.body.appendChild(panel);
+        }
+
+        async function sendSticker(packageId, stickerId) {
+            if (!currentUserId) return;
+            const panel = document.getElementById('stickerPanel');
+            if (panel) panel.remove();
+
+            try {
+                const res = await fetch('/api/reply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: currentUserId, type: 'sticker', packageId, stickerId }),
+                    redirect: 'manual'
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ error: 'HTTP ' + res.status }));
+                    alert('❌ ส่งสติกเกอร์ไม่สำเร็จ: ' + (err.error || 'ไม่ทราบสาเหตุ'));
+                }
+            } catch (e) {
+                alert('❌ เชื่อมต่อเซิร์ฟเวอร์ไม่ได้: ' + e.message);
+            }
+        }
 
         socket.on('newMessage', (msg) => {
             if (currentUserId === msg.userId) {

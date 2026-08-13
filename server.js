@@ -1466,7 +1466,7 @@ app.post('/api/customers/:userId/note', checkAuth, (req, res) => {
 });
 
 app.post('/api/reply', checkAuth, async (req, res) => {
-  const { userId, text, type, imageBase64, fileBase64, fileName } = req.body;
+  const { userId, text, type, imageBase64, fileBase64, fileName, packageId, stickerId } = req.body;
   const admin = req.session.admin;
   const now = new Date().toISOString();
   
@@ -1566,6 +1566,15 @@ app.post('/api/reply', checkAuth, async (req, res) => {
           sender: { name: senderName }
         };
       }
+    } else if (msgType === 'sticker') {
+      msgText = '[ส่งสติกเกอร์]';
+      savedFileUrl = `https://stickershop.line-scdn.net/stickershop/v1/sticker/${stickerId}/android/sticker.png`;
+      lineMessage = {
+        type: 'sticker',
+        packageId: String(packageId),
+        stickerId: String(stickerId),
+        sender: { name: senderName }
+      };
     } else {
       lineMessage = {
         type: 'text',
