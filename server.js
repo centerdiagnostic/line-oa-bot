@@ -440,15 +440,20 @@ async function handleEvent(event) {
   }
 
   if (event.type !== 'message') return Promise.resolve(null);
-  if (event.message.type !== 'text' && event.message.type !== 'image' && event.message.type !== 'file') return Promise.resolve(null);
+  if (event.message.type !== 'text' && event.message.type !== 'image' && event.message.type !== 'file' && event.message.type !== 'sticker') return Promise.resolve(null);
   
   const userId = event.source.userId;
-  let text = event.message.type === 'text' ? event.message.text : (event.message.type === 'file' ? '[ส่งไฟล์เอกสาร]' : '[ส่งรูปภาพ/สติกเกอร์]');
-  const msgType = event.message.type === 'image' ? 'image' : (event.message.type === 'file' ? 'file' : 'text');
+  let text = event.message.type === 'text' ? event.message.text : (event.message.type === 'file' ? '[ส่งไฟล์เอกสาร]' : (event.message.type === 'sticker' ? '[ส่งสติกเกอร์]' : '[ส่งรูปภาพ]'));
+  const msgType = event.message.type === 'image' ? 'image' : (event.message.type === 'file' ? 'file' : (event.message.type === 'sticker' ? 'sticker' : 'text'));
   const now = new Date().toISOString();
   let savedFileUrl = null;
 
   try {
+    // สติกเกอร์: ใช้ URL รูปสาธารณะของ LINE ได้เลย ไม่ต้องอัปโหลดเข้า Storage
+    if (msgType === 'sticker') {
+      savedFileUrl = `https://stickershop.line-scdn.net/stickershop/v1/sticker/${event.message.stickerId}/android/sticker.png`;
+    }
+
     // ดึงไฟล์หรือรูปภาพจาก LINE ถ้าลูกค้าส่งมา
     if (msgType === 'image' || msgType === 'file') {
       const stream = await blobClient.getMessageContent(event.message.id);
@@ -484,7 +489,7 @@ async function handleEvent(event) {
       io.emit('updateCustomer', { userId, displayName: profile.displayName, pictureUrl: profile.pictureUrl, status: 'pending', last_update: now });
 
       // แจ้งเตือน Push ไปหาแอดมินทุกคนเมื่อลูกค้าทักเข้ามาใหม่
-      const pushBody = msgType === 'text' ? text : '📎 ส่งไฟล์/รูปภาพมาให้';
+      const pushBody = msgType === 'text' ? text : (msgType === 'sticker' ? '😊 ส่งสติกเกอร์มาให้' : '📎 ส่งไฟล์/รูปภาพมาให้');
       sendPushToAllAdmins(`💬 ${profile.displayName || 'ลูกค้า'}`, pushBody, '/dashboard');
     });
     return Promise.resolve(null);

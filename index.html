@@ -515,7 +515,9 @@
                 }
                 
                 let contentHtml = `<div>${msg.text}</div>`;
-                if (msg.msg_type === 'image' && msg.file_url) {
+                if (msg.msg_type === 'sticker' && msg.file_url) {
+                    contentHtml = `<img src="${msg.file_url}" style="width: 120px; height: 120px; object-fit: contain;">`;
+                } else if (msg.msg_type === 'image' && msg.file_url) {
                     contentHtml = `<img src="${msg.file_url}" style="max-width: 250px; max-height: 250px; object-fit: contain; border-radius: 8px; margin-bottom: 5px; cursor: pointer;" onclick="window.open('${msg.file_url}', '_blank')">`;
                 } else if (msg.msg_type === 'file' && msg.file_url) {
                     contentHtml = `<a href="${msg.file_url}" target="_blank" style="display: inline-block; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 8px; text-decoration: none; color: #333; font-weight: bold;">📄 เปิดดูไฟล์เอกสาร</a>`;
@@ -622,7 +624,9 @@
                 }
                 
                 let contentHtml = `<div>${msg.text}</div>`;
-                if (msg.msgType === 'image' && msg.fileUrl) {
+                if (msg.msgType === 'sticker' && msg.fileUrl) {
+                    contentHtml = `<img src="${msg.fileUrl}" style="width: 120px; height: 120px; object-fit: contain;">`;
+                } else if (msg.msgType === 'image' && msg.fileUrl) {
                     contentHtml = `<img src="${msg.fileUrl}" style="max-width: 250px; max-height: 250px; object-fit: contain; border-radius: 8px; margin-bottom: 5px; cursor: pointer;" onclick="window.open('${msg.fileUrl}', '_blank')">`;
                 } else if (msg.msgType === 'file' && msg.fileUrl) {
                     contentHtml = `<a href="${msg.fileUrl}" target="_blank" style="display: inline-block; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 8px; text-decoration: none; color: #333; font-weight: bold;">📄 เปิดดูไฟล์เอกสาร</a>`;
