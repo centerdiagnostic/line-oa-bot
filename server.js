@@ -47,14 +47,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 const port = process.env.PORT || 3000;
 
-const pgSession = require('connect-pg-simple')(session);
-app.use(session({
-  store: new pgSession({ pool: pool, tableName: 'user_sessions', createTableIfMissing: true }),
-  secret: process.env.SESSION_SECRET || 'secret_key',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { maxAge: 24 * 60 * 60 * 1000 }
-}));
+// หมายเหตุ: ย้ายการตั้งค่า session ไปไว้หลังการสร้าง pool แล้ว (ดูด้านล่าง)
 
 // กำหนดการเชื่อมต่อ Supabase
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -71,6 +64,16 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
+
+// ตั้งค่า Session โดยเก็บลง PostgreSQL (ต้องอยู่หลัง pool เท่านั้น ไม่งั้นจะ ReferenceError)
+const pgSession = require('connect-pg-simple')(session);
+app.use(session({
+  store: new pgSession({ pool: pool, tableName: 'user_sessions', createTableIfMissing: true }),
+  secret: process.env.SESSION_SECRET || 'secret_key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { maxAge: 24 * 60 * 60 * 1000 }
+}));
 
 const db = {
   serialize: (cb) => cb(),
@@ -957,7 +960,7 @@ app.get('/api/summary_data', checkAuth, checkAdminRole, (req, res) => {
                 FROM messages m 
                 LEFT JOIN admins a ON m.admin_id = a.user_id 
                 WHERE m.sender = 'admin' ` + dateConditionMsg.replace('timestamp', 'm.timestamp') + `
-                GROUP BY COALESCE(m.admin_id, m.admin_name) 
+                GROUP BY m.admin_id, m.admin_name, a.custom_name, a.display_name
                 ORDER BY reply_count DESC`;
               db.all(statsQuery, dateParamMsg, (err, adminStats) => {
                 data.admin_stats = adminStats || [];
