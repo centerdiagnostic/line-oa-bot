@@ -916,7 +916,7 @@ app.get('/api/summary_data', checkAuth, checkAdminRole, (req, res) => {
   let dateParamMsg = [];
   
   if (date) {
-    dateConditionMsg = " AND date(timestamp AT TIME ZONE 'Asia/Bangkok') = ?";
+    dateConditionMsg = " AND date((timestamp::timestamptz) AT TIME ZONE 'Asia/Bangkok') = ?";
     dateParamMsg.push(date);
   }
 
@@ -961,7 +961,7 @@ app.get('/api/summary_data', checkAuth, checkAdminRole, (req, res) => {
                   COALESCE(a.custom_name, a.display_name, m.admin_name) as admin_name, 
                   COUNT(m.id) as reply_count,
                   (SELECT AVG(r.score) FROM ratings r WHERE r.admin_id = m.admin_id
-                    ${date ? "AND date(r.timestamp) = '" + date.replace(/[^0-9-]/g, '') + "'" : ""}) as avg_rating
+                    ${date ? "AND date((r.timestamp::timestamptz) AT TIME ZONE 'Asia/Bangkok') = '" + date.replace(/[^0-9-]/g, '') + "'" : ""}) as avg_rating
                 FROM messages m 
                 LEFT JOIN admins a ON m.admin_id = a.user_id 
                 WHERE m.sender = 'admin' ` + dateConditionMsg.replace('timestamp', 'm.timestamp') + `
