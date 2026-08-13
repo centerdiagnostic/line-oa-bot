@@ -522,7 +522,13 @@
                 } else if (msg.msg_type === 'image' && msg.file_url) {
                     contentHtml = `<img src="${msg.file_url}" style="max-width: 250px; max-height: 250px; object-fit: contain; border-radius: 8px; margin-bottom: 5px; cursor: pointer;" onclick="window.open('${msg.file_url}', '_blank')">`;
                 } else if (msg.msg_type === 'file' && msg.file_url) {
-                    contentHtml = `<a href="${msg.file_url}" target="_blank" style="display: inline-block; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 8px; text-decoration: none; color: #333; font-weight: bold;">📄 เปิดดูไฟล์เอกสาร</a>`;
+                    contentHtml = `<a href="${msg.file_url}" target="_blank" style="display: flex; align-items: center; gap: 10px; padding: 12px; background: #fff; border: 1px solid #ddd; border-radius: 8px; text-decoration: none; color: #333; max-width: 260px;">
+                        <div style="font-size: 1.8rem;">📄</div>
+                        <div style="overflow: hidden;">
+                            <div style="font-weight: bold; font-size: 0.9rem; word-break: break-all;">${getFileName(msg.text)}</div>
+                            <div style="font-size: 0.75rem; color: #999; margin-top: 2px;">แตะเพื่อเปิดหรือดาวน์โหลด</div>
+                        </div>
+                    </a>`;
                 }
 
                 div.innerHTML = `
@@ -607,6 +613,12 @@
 
         function handleEnter(e) { if (e.key === 'Enter') sendMessage(); }
 
+        // ดึงชื่อไฟล์จากข้อความรูปแบบ [ส่งไฟล์: ชื่อไฟล์.pdf]
+        function getFileName(text) {
+            const m = (text || '').match(/\[ส่งไฟล์:\s*(.+?)\]/);
+            return m ? m[1] : 'เอกสาร.pdf';
+        }
+
         // ชุดสติกเกอร์พื้นฐานของ LINE ที่ Messaging API ส่งได้
         const STICKER_SETS = [
             { packageId: '446', name: 'Brown & Cony', ids: ['1988','1989','1990','1991','1992','1993','1994','1995','1996','1997','1998','1999','2000','2001','2002','2003','2004','2005','2006','2007','2008','2009','2010','2011'] },
@@ -682,7 +694,13 @@
                 } else if (msg.msgType === 'image' && msg.fileUrl) {
                     contentHtml = `<img src="${msg.fileUrl}" style="max-width: 250px; max-height: 250px; object-fit: contain; border-radius: 8px; margin-bottom: 5px; cursor: pointer;" onclick="window.open('${msg.fileUrl}', '_blank')">`;
                 } else if (msg.msgType === 'file' && msg.fileUrl) {
-                    contentHtml = `<a href="${msg.fileUrl}" target="_blank" style="display: inline-block; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 8px; text-decoration: none; color: #333; font-weight: bold;">📄 เปิดดูไฟล์เอกสาร</a>`;
+                    contentHtml = `<a href="${msg.fileUrl}" target="_blank" style="display: flex; align-items: center; gap: 10px; padding: 12px; background: #fff; border: 1px solid #ddd; border-radius: 8px; text-decoration: none; color: #333; max-width: 260px;">
+                        <div style="font-size: 1.8rem;">📄</div>
+                        <div style="overflow: hidden;">
+                            <div style="font-weight: bold; font-size: 0.9rem; word-break: break-all;">${getFileName(msg.text)}</div>
+                            <div style="font-size: 0.75rem; color: #999; margin-top: 2px;">แตะเพื่อเปิดหรือดาวน์โหลด</div>
+                        </div>
+                    </a>`;
                 }
 
                 div.innerHTML = `${senderTag}${contentHtml}<div class="msg-time">${timeStr}</div>${readByTag}`;

@@ -1512,7 +1512,7 @@ app.post('/api/reply', checkAuth, async (req, res) => {
       savedFileUrl = secureUrl;
       
       if (isPdf) {
-        msgText = `[ส่งไฟล์ PDF]`;
+        msgText = `[ส่งไฟล์: ${fileName || 'เอกสาร.pdf'}]`;
         lineMessage = {
           type: 'flex',
           altText: `ไฟล์เอกสาร: ${fileName || 'เอกสาร.pdf'}`,
