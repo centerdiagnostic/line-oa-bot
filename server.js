@@ -470,11 +470,17 @@ async function handleEvent(event) {
         contentType: ext === 'pdf' ? 'application/pdf' : 'image/jpeg'
       });
       if (upErr) throw new Error('อัปโหลดไฟล์ไม่สำเร็จ: ' + upErr.message);
-      if (error) throw error;
-      const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(filename);
-      
-      savedFileUrl = publicUrlData.publicUrl;
-      text = msgType === 'file' ? `[ส่งไฟล์: ${event.message.fileName || 'เอกสาร'}]` : '[ส่งรูปภาพ]';
+      if (error) {
+        // อัปโหลดพัง: ไม่ทิ้งข้อความ แต่บันทึกเป็นข้อความแจ้งเตือนแทน เพื่อให้แอดมินรู้ว่ามีคนส่งไฟล์มา
+        console.error('❌ อัปโหลดไฟล์ขาเข้าไม่สำเร็จ:', error.message);
+        savedFileUrl = null;
+        text = msgType === 'file' ? '⚠️ ลูกค้าส่งไฟล์มา แต่ระบบบันทึกไฟล์ไม่สำเร็จ' : '⚠️ ลูกค้าส่งรูปมา แต่ระบบบันทึกรูปไม่สำเร็จ';
+        msgType = 'text';
+      } else {
+        const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(filename);
+        savedFileUrl = publicUrlData.publicUrl;
+        text = msgType === 'file' ? `[ส่งไฟล์: ${event.message.fileName || 'เอกสาร'}]` : '[ส่งรูปภาพ]';
+      }
     }
 
     const profile = await client.getProfile(userId);
@@ -493,7 +499,10 @@ async function handleEvent(event) {
       sendPushToAllAdmins(`💬 ${profile.displayName || 'ลูกค้า'}`, pushBody, '/dashboard');
     });
     return Promise.resolve(null);
-  } catch (err) { console.error(err); return Promise.resolve(null); }
+  } catch (err) {
+    console.error('❌ รับข้อความจากลูกค้าไม่สำเร็จ | ชนิด:', msgType, '| สาเหตุ:', err.message, err);
+    return Promise.resolve(null);
+  }
 }
 
 app.get('/dashboard', checkAuth, (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
