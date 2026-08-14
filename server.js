@@ -633,39 +633,61 @@ app.get('/summary', checkAuth, checkAdminRole, (req, res) => {
       <title>หน้าสรุปข้อมูล (Dashboard Summary)</title>
       <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
       <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; color: #333; }
-        .header { background-color: #00B900; color: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .header h1 { margin: 0; font-size: 1.2rem; }
-        .back-btn { color: white; text-decoration: none; background: rgba(0,0,0,0.2); padding: 8px 15px; border-radius: 6px; font-size: 0.9rem; font-weight: bold; transition: background 0.3s; }
-        .back-btn:hover { background: rgba(0,0,0,0.3); }
-        .container { max-width: 1000px; margin: 40px auto; padding: 0 20px; }
-        .filter-bar { background: white; padding: 15px 25px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; display: flex; align-items: center; gap: 15px; }
-        .filter-bar input[type="date"] { padding: 8px 15px; border: 1px solid #ddd; border-radius: 6px; font-family: inherit; font-size: 1rem; outline: none; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 30px; }
-        .card { background: white; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; position: relative; }
-        .card.clickable { cursor: pointer; transition: transform 0.2s; border: 1px solid transparent; }
-        .card.clickable:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.1); border-color: #00B900; }
-        .card-icon { font-size: 2.2rem; margin-bottom: 10px; }
-        .card-value { font-size: 1.8rem; font-weight: bold; color: #00B900; margin-bottom: 5px; }
-        .card-label { font-size: 0.85rem; color: #666; font-weight: 500; }
-        .info-panel { background: white; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); padding: 30px; margin-bottom: 30px; }
-        .info-panel h2 { margin-top: 0; color: #444; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; font-size: 1.1rem; }
-        .chart-container { max-width: 420px; height: 420px; margin: 0 auto 20px auto; position: relative; }
+        :root {
+          --bg: #f5f6f8;
+          --card-bg: #ffffff;
+          --border: #e5e7eb;
+          --text-primary: #1f2937;
+          --text-secondary: #6b7280;
+          --accent: #049c4f;
+          --accent-soft: #e6f7ee;
+        }
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg); margin: 0; padding: 0; color: var(--text-primary); }
+        .header { background-color: var(--card-bg); color: var(--text-primary); padding: 16px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); }
+        .header h1 { margin: 0; font-size: 1.1rem; font-weight: 600; letter-spacing: 0.2px; display: flex; align-items: center; }
+        .header h1 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 10px; }
+        .back-btn { color: var(--text-secondary); text-decoration: none; background: var(--card-bg); border: 1px solid var(--border); padding: 8px 15px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; transition: all 0.2s; }
+        .back-btn:hover { background: var(--bg); color: var(--text-primary); border-color: #d1d5db; }
+        .container { max-width: 1080px; margin: 32px auto; padding: 0 20px; }
+        .filter-bar { background: var(--card-bg); padding: 14px 20px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .filter-bar label { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); }
+        .filter-bar input[type="date"] { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; font-family: inherit; font-size: 0.9rem; outline: none; color: var(--text-primary); }
+        .btn-outline { padding: 8px 15px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; color: var(--text-primary); font-weight: 600; font-size: 0.85rem; transition: all 0.2s; }
+        .btn-outline:hover { background: var(--bg); border-color: #d1d5db; }
+        .btn-primary { padding: 8px 16px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.85rem; margin-left: auto; display: flex; align-items: center; gap: 6px; transition: background 0.2s; }
+        .btn-primary:hover { background: #037d40; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 24px; }
+        .card { background: var(--card-bg); border-radius: 10px; border: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; text-align: left; position: relative; }
+        .card.clickable { cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s; }
+        .card.clickable:hover { border-color: var(--accent); box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+        .card-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; margin-bottom: 14px; }
+        .icon-blue { background: #e8f0fe; }
+        .icon-purple { background: #f1ecfb; }
+        .icon-green { background: var(--accent-soft); }
+        .icon-orange { background: #fdf1e3; }
+        .icon-teal { background: #e3f6f6; }
+        .card-value { font-size: 1.7rem; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; line-height: 1.1; }
+        .card-label { font-size: 0.75rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+        .info-panel { background: var(--card-bg); border-radius: 10px; border: 1px solid var(--border); padding: 28px; margin-bottom: 24px; }
+        .info-panel h2 { margin-top: 0; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 20px; font-size: 1rem; font-weight: 600; }
+        .chart-container { max-width: 380px; height: 380px; margin: 0 auto 24px auto; position: relative; }
         table { width: 100%; border-collapse: collapse; text-align: left; }
-        th { background-color: #f8f9fa; color: #555; padding: 12px 15px; border-bottom: 2px solid #ddd; font-size: 0.95rem; }
-        td { padding: 12px 15px; border-bottom: 1px solid #eee; }
-        
+        th { background-color: var(--bg); color: var(--text-secondary); padding: 10px 15px; border-bottom: 1px solid var(--border); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; }
+        td { padding: 12px 15px; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+        tbody tr:hover { background-color: #fafbfc; }
+
         /* Modal Styles */
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
-        .modal-content { background: white; padding: 25px; border-radius: 10px; width: 400px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-        .modal-header h3 { margin: 0; color: #333; font-size: 1.1rem; }
-        .close-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #999; }
-        .admin-list-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(17,24,39,0.5); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-content { background: var(--card-bg); padding: 24px; border-radius: 10px; width: 400px; max-height: 80vh; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+        .modal-header h3 { margin: 0; color: var(--text-primary); font-size: 1rem; font-weight: 600; }
+        .close-btn { background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--text-secondary); line-height: 1; }
+        .admin-list-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
         .admin-list-item:last-child { border-bottom: none; }
-        .admin-role { font-size: 0.75rem; padding: 4px 10px; border-radius: 12px; font-weight: bold; }
-        .role-admin { background: #e3f2fd; color: #1976d2; }
-        .role-op { background: #f1f8e9; color: #388e3c; }
+        .admin-role { font-size: 0.7rem; padding: 4px 10px; border-radius: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+        .role-admin { background: #e8f0fe; color: #1a56db; }
+        .role-op { background: var(--accent-soft); color: #037d40; }
 
         @media (max-width: 768px) {
           body { overflow-x: hidden; }
@@ -674,7 +696,8 @@ app.get('/summary', checkAuth, checkAdminRole, (req, res) => {
           .back-btn { padding: 6px 10px; font-size: 0.8rem; }
           .container { margin: 16px auto; padding: 0 12px; }
           .filter-bar { flex-wrap: wrap; padding: 12px 15px; gap: 10px; }
-          .info-panel { padding: 15px; }
+          .btn-primary { margin-left: 0; }
+          .info-panel { padding: 16px; }
           .modal-content { width: 90vw; max-width: 360px; padding: 18px; }
           .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
           table { min-width: 480px; }
@@ -683,41 +706,41 @@ app.get('/summary', checkAuth, checkAdminRole, (req, res) => {
     </head>
     <body>
       <div class="header">
-        <h1>📊 หน้าสรุปข้อมูล (Dashboard Summary)</h1>
+        <h1><span class="dot"></span>หน้าสรุปข้อมูล (Dashboard Summary)</h1>
         <a href="/dashboard" class="back-btn">❮ กลับไปหน้าแชท</a>
       </div>
       <div class="container">
-        
+
         <div class="filter-bar">
-          <label style="font-weight: bold; color: #555;">📅 เลือกวันที่:</label>
+          <label>เลือกวันที่:</label>
           <input type="date" id="dateFilter" onchange="loadSummary()">
-          <button onclick="document.getElementById('dateFilter').value=''; loadSummary();" style="padding: 8px 15px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; color: #333; font-weight: bold;">ดูยอดรวมทั้งหมด</button>
-          <button onclick="exportToExcel()" style="padding: 8px 15px; background: #217346; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; margin-left: auto; display: flex; align-items: center; gap: 5px;">📊 ดาวน์โหลด Excel</button>
+          <button class="btn-outline" onclick="document.getElementById('dateFilter').value=''; loadSummary();">ดูยอดรวมทั้งหมด</button>
+          <button class="btn-primary" onclick="exportToExcel()">ดาวน์โหลด Excel</button>
         </div>
 
         <div class="grid">
           <div class="card clickable" onclick="openAdminModal()">
-            <div class="card-icon">👥</div>
+            <div class="card-icon icon-blue">👥</div>
             <div class="card-value" id="totalAdmins">-</div>
             <div class="card-label">แอดมินทั้งหมด (คน)</div>
           </div>
           <div class="card">
-            <div class="card-icon">📥</div>
+            <div class="card-icon icon-purple">📥</div>
             <div class="card-value" id="totalChats">-</div>
             <div class="card-label">คนทักแชทมา (คน)</div>
           </div>
           <div class="card">
-            <div class="card-icon">💬</div>
+            <div class="card-icon icon-green">💬</div>
             <div class="card-value" id="answeredChats">-</div>
             <div class="card-label">การตอบกลับ (คน)</div>
           </div>
           <div class="card">
-            <div class="card-icon">⏳</div>
+            <div class="card-icon icon-orange">⏳</div>
             <div class="card-value" id="pendingChats">-</div>
             <div class="card-label">ค้างตอบ (คน)</div>
           </div>
           <div class="card">
-            <div class="card-icon">⚡</div>
+            <div class="card-icon icon-teal">⚡</div>
             <div class="card-value" id="avgResponseTime">-</div>
             <div class="card-label">เวลาตอบเฉลี่ย (นาที)</div>
           </div>
