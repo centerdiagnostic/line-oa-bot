@@ -281,6 +281,18 @@
         let customersData = [];
         let myProfile = null;
 
+        // กัน XSS: ชื่อโปรไฟล์ LINE และข้อความแชทมาจากลูกค้าโดยตรง (ใครก็ทักเข้ามาได้โดยไม่ต้องมีสิทธิ์)
+        // ต้อง escape ตัวอักษรพิเศษของ HTML ก่อนแปะลงหน้าเว็บทุกครั้งที่ใช้ innerHTML
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
         async function loadMyProfile() {
             const res = await fetch('/api/me');
             myProfile = await res.json();
@@ -354,9 +366,14 @@
         }
 
         async function loadCustomers() {
-            const res = await fetch('/api/customers');
-            customersData = await res.json();
-            renderCustomerList();
+            try {
+                const res = await fetch('/api/customers');
+                if (!res.ok) throw new Error('server error');
+                customersData = await res.json();
+                renderCustomerList();
+            } catch (err) {
+                document.getElementById('sidebar').innerHTML = '<div style="padding:20px; text-align:center; color:#999;">❌ โหลดรายชื่อลูกค้าไม่สำเร็จ กรุณารีเฟรชหน้าใหม่</div>';
+            }
         }
 
         function renderCustomerList() {
@@ -386,7 +403,7 @@
                 }
 
                 const isActive = currentUserId === c.user_id ? 'active' : '';
-                const avatarStyle = c.picture_url ? `background-image: url('${c.picture_url}');` : '';
+                const avatarStyle = c.picture_url ? `background-image: url('${escapeHtml(c.picture_url)}');` : '';
                 const handledBadge = c.handled_by ? `<span class="handled-badge">รับเคสแล้ว</span>` : '';
 
                 const div = document.createElement('div');
@@ -395,7 +412,7 @@
                 div.innerHTML = `
                     <div class="avatar" style="${avatarStyle}"></div>
                     <div class="customer-info">
-                        <div class="customer-name">${c.display_name || 'ลูกค้า'}</div>
+                        <div class="customer-name">${escapeHtml(c.display_name) || 'ลูกค้า'}</div>
                         <div>
                             <span class="status-badge ${statusClass}">${statusText}</span>
                             ${handledBadge}
@@ -428,7 +445,7 @@
             const claimBtn = document.getElementById('claimBtn');
             if (customer.handled_by === myProfile.userId) {
                 claimBtn.style.display = 'none';
-                document.getElementById('currentName').innerHTML = (customer.display_name || 'ลูกค้า') + ' <span style="font-size:0.7rem; color:#17a2b8; margin-left:10px;">(คุณรับผิดชอบเคสนี้)</span>';
+                document.getElementById('currentName').innerHTML = (escapeHtml(customer.display_name) || 'ลูกค้า') + ' <span style="font-size:0.7rem; color:#17a2b8; margin-left:10px;">(คุณรับผิดชอบเคสนี้)</span>';
             } else {
                 claimBtn.style.display = 'inline-block';
             }
@@ -454,8 +471,13 @@
 
         async function claimChat() {
             if(!currentUserId) return;
-            await fetch(`/api/customers/${currentUserId}/claim`, { method: 'POST' });
-            showAppAlert("✅ คุณได้รับเรื่องดูแลแชทนี้แล้ว");
+            try {
+                const res = await fetch(`/api/customers/${currentUserId}/claim`, { method: 'POST' });
+                if (!res.ok) throw new Error('server error');
+                showAppAlert("✅ คุณได้รับเรื่องดูแลแชทนี้แล้ว");
+            } catch (err) {
+                showAppAlert("❌ กดรับเรื่องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+            }
         }
 
         function toggleNote() {
@@ -473,14 +495,19 @@
         async function saveNote() {
             if(!currentUserId) return;
             const note = document.getElementById('internalNoteInput').value;
-            await fetch(`/api/customers/${currentUserId}/note`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ note: note })
-            });
-            const idx = customersData.findIndex(c => c.user_id === currentUserId);
-            if(idx > -1) customersData[idx].internal_note = note;
-            showAppAlert("📝 บันทึกโน้ตสำเร็จ");
+            try {
+                const res = await fetch(`/api/customers/${currentUserId}/note`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ note: note })
+                });
+                if (!res.ok) throw new Error('server error');
+                const idx = customersData.findIndex(c => c.user_id === currentUserId);
+                if(idx > -1) customersData[idx].internal_note = note;
+                showAppAlert("📝 บันทึกโน้ตสำเร็จ");
+            } catch (err) {
+                showAppAlert("❌ บันทึกโน้ตไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+            }
         }
 
         function insertQR(text) {
@@ -516,7 +543,7 @@
                     div.onclick = () => toggleReadBy(msg.id);
                 }
                 
-                let contentHtml = `<div>${msg.text}</div>`;
+                let contentHtml = `<div>${escapeHtml(msg.text)}</div>`;
                 if (msg.msg_type === 'sticker' && msg.file_url) {
                     contentHtml = `<img src="${msg.file_url}" style="width: 120px; height: 120px; object-fit: contain;">`;
                 } else if (msg.msg_type === 'image' && msg.file_url) {
@@ -525,7 +552,7 @@
                     contentHtml = `<a href="${msg.file_url}" target="_blank" style="display: flex; align-items: center; gap: 10px; padding: 12px; background: #fff; border: 1px solid #ddd; border-radius: 8px; text-decoration: none; color: #333; max-width: 260px;">
                         <div style="font-size: 1.8rem;">📄</div>
                         <div style="overflow: hidden;">
-                            <div style="font-weight: bold; font-size: 0.9rem; word-break: break-all;">${getFileName(msg.text)}</div>
+                            <div style="font-weight: bold; font-size: 0.9rem; word-break: break-all;">${escapeHtml(getFileName(msg.text))}</div>
                             <div style="font-size: 0.75rem; color: #999; margin-top: 2px;">แตะเพื่อเปิดหรือดาวน์โหลด</div>
                         </div>
                     </a>`;
@@ -604,11 +631,20 @@
 
         async function changeStatus(newStatus) {
             if(!currentUserId) return;
-            await fetch(`/api/customers/${currentUserId}/status`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: newStatus })
-            });
+            const idx = customersData.findIndex(c => c.user_id === currentUserId);
+            const oldStatus = idx > -1 ? customersData[idx].status : null;
+            try {
+                const res = await fetch(`/api/customers/${currentUserId}/status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus })
+                });
+                if (!res.ok) throw new Error('server error');
+            } catch (err) {
+                // เปลี่ยนสถานะไม่สำเร็จ: คืนค่า dropdown กลับเป็นสถานะเดิม ไม่ให้แอดมินเข้าใจผิดว่าเปลี่ยนแล้ว
+                if (oldStatus) document.getElementById('statusSelect').value = oldStatus;
+                showAppAlert("❌ เปลี่ยนสถานะไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+            }
         }
 
         function handleEnter(e) { if (e.key === 'Enter') sendMessage(); }
@@ -688,7 +724,7 @@
                     div.onclick = () => toggleReadBy(msgId);
                 }
                 
-                let contentHtml = `<div>${msg.text}</div>`;
+                let contentHtml = `<div>${escapeHtml(msg.text)}</div>`;
                 if (msg.msgType === 'sticker' && msg.fileUrl) {
                     contentHtml = `<img src="${msg.fileUrl}" style="width: 120px; height: 120px; object-fit: contain;">`;
                 } else if (msg.msgType === 'image' && msg.fileUrl) {
@@ -697,7 +733,7 @@
                     contentHtml = `<a href="${msg.fileUrl}" target="_blank" style="display: flex; align-items: center; gap: 10px; padding: 12px; background: #fff; border: 1px solid #ddd; border-radius: 8px; text-decoration: none; color: #333; max-width: 260px;">
                         <div style="font-size: 1.8rem;">📄</div>
                         <div style="overflow: hidden;">
-                            <div style="font-weight: bold; font-size: 0.9rem; word-break: break-all;">${getFileName(msg.text)}</div>
+                            <div style="font-weight: bold; font-size: 0.9rem; word-break: break-all;">${escapeHtml(getFileName(msg.text))}</div>
                             <div style="font-size: 0.75rem; color: #999; margin-top: 2px;">แตะเพื่อเปิดหรือดาวน์โหลด</div>
                         </div>
                     </a>`;
@@ -716,7 +752,7 @@
             }
         });
 
-        socket.on('updateCustomer', (updatedData) => { loadCustomers(); });
+        socket.on('updateCustomer', () => { loadCustomers(); });
         socket.on('updateCustomerStatusOnly', (data) => {
             const idx = customersData.findIndex(c => c.user_id === data.userId);
             if(idx > -1) customersData[idx].status = data.status;
@@ -758,8 +794,10 @@
             }
         }
 
-        loadMyProfile();
-        loadCustomers();
+        // ต้องรอให้โปรไฟล์แอดมิน (myProfile) โหลดเสร็จก่อน เพราะการแสดงรายชื่อลูกค้าต้องใช้
+        // myProfile.userId (เช่น ตัวกรอง "แชทของฉัน") ถ้าปล่อยให้โหลดพร้อมกันแล้วแอดมินคลิกเร็ว
+        // ก่อนโปรไฟล์โหลดเสร็จ หน้าจอจะค้าง/error กลางทาง
+        loadMyProfile().then(loadCustomers);
         loadQuickReplies();
         subscribeToPush();
     </script>

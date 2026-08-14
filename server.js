@@ -65,11 +65,22 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
+// ดักฟัง error ของ connection ที่ว่างอยู่ใน pool — ถ้าไม่ดักไว้ ไลบรารี pg จะถือว่าเป็น
+// error ร้ายแรงแล้วทำให้ Node process ทั้งตัว crash ทันทีเมื่อ DB สะดุดชั่วคราว (เน็ตกระตุก,
+// Supabase พักเครื่อง ฯลฯ) ซึ่งจะทำให้แชทของลูกค้า/แอดมินทุกคนหลุดพร้อมกันหมด
+pool.on('error', (err) => {
+  console.error('⚠️ Postgres pool เกิด error (connection ที่ว่างอยู่หลุด):', err.message);
+});
+
 // ตั้งค่า Session โดยเก็บลง PostgreSQL (ต้องอยู่หลัง pool เท่านั้น ไม่งั้นจะ ReferenceError)
+if (!process.env.SESSION_SECRET) {
+  console.error('❌ Error: ไม่พบค่า SESSION_SECRET กรุณาเพิ่มในไฟล์ .env (ห้ามปล่อยว่าง เพราะใช้เซ็นรับรอง session cookie ของแอดมิน)');
+  process.exit(1);
+}
 const pgSession = require('connect-pg-simple')(session);
 app.use(session({
   store: new pgSession({ pool: pool, tableName: 'user_sessions', createTableIfMissing: true }),
-  secret: process.env.SESSION_SECRET || 'secret_key',
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: { maxAge: 24 * 60 * 60 * 1000 }
@@ -382,20 +393,7 @@ app.post('/webhook', line.middleware(config), (req, res) => {
   });
 });
 
-const fs = require('fs');
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
-app.use('/uploads', express.static(uploadsDir));
 app.use(express.static(path.join(__dirname, 'public')));
-
-// เสิร์ฟไฟล์ PWA ที่วางไว้ root ของโปรเจกต์
-app.get('/manifest.json', (req, res) => res.sendFile(path.join(__dirname, 'manifest.json')));
-app.get('/service-worker.js', (req, res) => {
-  res.set('Service-Worker-Allowed', '/');
-  res.type('application/javascript');
-  res.sendFile(path.join(__dirname, 'service-worker.js'));
-});
-app.use('/icons', express.static(path.join(__dirname, 'icons')));
 
 app.use(express.json({limit: '50mb'}));
 app.use(express.urlencoded({extended: true, limit: '50mb'}));
@@ -406,6 +404,15 @@ async function handleEvent(event) {
     if (data.get('action') === 'rate') {
       const score = data.get('score');
       db.get(`SELECT rating, handled_by FROM customers WHERE user_id = ?`, [event.source.userId], async (err, row) => {
+        if (err) {
+          // ถ้าดึงข้อมูลไม่สำเร็จ ไม่รู้ว่าเคยให้คะแนนไปแล้วหรือยัง เพื่อความปลอดภัยให้ถือว่า
+          // "เคยให้แล้ว" ไว้ก่อน กันไม่ให้บันทึกคะแนนซ้ำเข้าไปในระบบ
+          console.error('❌ ดึงข้อมูล rating เดิมไม่สำเร็จ:', err.message);
+          return client.replyMessage({
+            replyToken: event.replyToken,
+            messages: [{ type: 'text', text: `ขออภัยครับ/ค่ะ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง` }]
+          });
+        }
         if (row && row.rating !== null) {
           await client.replyMessage({
             replyToken: event.replyToken,
@@ -444,7 +451,7 @@ async function handleEvent(event) {
   
   const userId = event.source.userId;
   let text = event.message.type === 'text' ? event.message.text : (event.message.type === 'file' ? '[ส่งไฟล์เอกสาร]' : (event.message.type === 'sticker' ? '[ส่งสติกเกอร์]' : '[ส่งรูปภาพ]'));
-  const msgType = event.message.type === 'image' ? 'image' : (event.message.type === 'file' ? 'file' : (event.message.type === 'sticker' ? 'sticker' : 'text'));
+  let msgType = event.message.type === 'image' ? 'image' : (event.message.type === 'file' ? 'file' : (event.message.type === 'sticker' ? 'sticker' : 'text'));
   const now = new Date().toISOString();
   let savedFileUrl = null;
 
@@ -466,7 +473,7 @@ async function handleEvent(event) {
       }
       const buffer = Buffer.concat(chunks);
       
-      const { data, error } = await supabase.storage.from('uploads').upload(filename, buffer, {
+      const { error } = await supabase.storage.from('uploads').upload(filename, buffer, {
         contentType: ext === 'pdf' ? 'application/pdf' : 'image/jpeg'
       });
       if (error) {
@@ -490,6 +497,11 @@ async function handleEvent(event) {
       [userId, profile.displayName, profile.pictureUrl, now]
     );
     db.run(`INSERT INTO messages (user_id, sender, text, timestamp, msg_type, file_url) VALUES (?, 'customer', ?, ?, ?, ?)`, [userId, text, now, msgType, savedFileUrl], function(err) {
+      if (err) {
+        // บันทึกข้อความลูกค้าลง DB ไม่สำเร็จ — ไม่ emit ต่อ เพราะไม่มีข้อมูลจริงให้แสดงบนหน้าแอดมิน
+        console.error('❌ บันทึกข้อความลูกค้าลง DB ไม่สำเร็จ:', err.message);
+        return;
+      }
       io.emit('newMessage', { id: this.lastID, userId, sender: 'customer', text, timestamp: now, msgType: msgType, fileUrl: savedFileUrl });
       io.emit('updateCustomer', { userId, displayName: profile.displayName, pictureUrl: profile.pictureUrl, status: 'pending', last_update: now });
 
@@ -530,9 +542,6 @@ app.get('/manage', checkAuth, checkAdminRole, (req, res) => {
         .user-info { display: flex; align-items: center; gap: 12px; }
         .avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 1px solid #ddd; }
         .role-badge { display: inline-block; padding: 5px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; }
-        .role-admin { background-color: #e3f2fd; color: #1976d2; }
-        .role-operator { background-color: #f1f8e9; color: #388e3c; }
-        .role-pending { background-color: #fff3e0; color: #f57c00; }
         select { padding: 6px 10px; border-radius: 6px; border: 1px solid #ccc; font-family: inherit; font-size: 0.9rem; outline: none; cursor: pointer; }
         select:focus { border-color: #00B900; }
 
@@ -560,26 +569,32 @@ app.get('/manage', checkAuth, checkAdminRole, (req, res) => {
         </div>
       </div>
       <script>
+        // กัน XSS: ชื่อโปรไฟล์ LINE มาจากคนที่สมัครเข้ามาเอง (ยังไม่ได้รับอนุมัติ) จึงเป็นค่าที่ไว้ใจไม่ได้
+        // ต้อง escape ตัวอักษรพิเศษของ HTML ก่อนแปะลงหน้าเว็บเสมอ
+        function escapeHtml(str) {
+          if (str === null || str === undefined) return '';
+          return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+        }
         fetch('/api/users').then(r=>r.json()).then(users=>{
           let html = '<table><thead><tr><th>ผู้ใช้งาน</th><th>ตำแหน่ง</th><th>สิทธิ์บรอดแคสต์</th><th>จัดการ</th></tr></thead><tbody>';
           if(users.length === 0) {
             html += '<tr><td colspan="4" style="text-align:center; padding: 30px;">ไม่มีข้อมูลผู้ใช้</td></tr>';
           } else {
             users.forEach(u=>{
-              const roleClass = 'role-' + u.role;
-              let roleText = 'รออนุมัติ';
-              if(u.role === 'admin') roleText = 'Admin';
-              if(u.role === 'operator') roleText = 'Operator';
-              
               const broadcastChecked = u.can_broadcast ? 'checked' : '';
-              
+
               html += '<tr>' +
                 '<td>' +
                   '<div class="user-info">' +
-                    '<img src="' + u.picture_url + '" class="avatar" alt="Avatar">' +
+                    '<img src="' + escapeHtml(u.picture_url) + '" class="avatar" alt="Avatar">' +
                     '<div>' +
-                      '<div style="font-weight:bold; color:#333;">' + u.display_name + '</div>' +
-                      (u.custom_name ? '<div style="font-size:0.8rem; color:#888;">ชื่อแอดมิน: ' + u.custom_name + '</div>' : '') +
+                      '<div style="font-weight:bold; color:#333;">' + escapeHtml(u.display_name) + '</div>' +
+                      (u.custom_name ? '<div style="font-size:0.8rem; color:#888;">ชื่อแอดมิน: ' + escapeHtml(u.custom_name) + '</div>' : '') +
                     '</div>' +
                   '</div>' +
                 '</td>' +
@@ -1001,13 +1016,16 @@ app.get('/api/summary_data', checkAuth, checkAdminRole, (req, res) => {
                   COALESCE(a.custom_name, a.display_name, m.admin_name) as admin_name, 
                   COUNT(m.id) as reply_count,
                   (SELECT AVG(r.score) FROM ratings r WHERE r.admin_id = m.admin_id
-                    ${date ? "AND date((r.timestamp::timestamptz) AT TIME ZONE 'Asia/Bangkok') = '" + date.replace(/[^0-9-]/g, '') + "'" : ""}) as avg_rating
-                FROM messages m 
-                LEFT JOIN admins a ON m.admin_id = a.user_id 
+                    ${date ? "AND date((r.timestamp::timestamptz) AT TIME ZONE 'Asia/Bangkok') = ?" : ""}) as avg_rating
+                FROM messages m
+                LEFT JOIN admins a ON m.admin_id = a.user_id
                 WHERE m.sender = 'admin' ` + dateConditionMsg.replace('timestamp', 'm.timestamp') + `
                 GROUP BY m.admin_id, m.admin_name, a.custom_name, a.display_name
                 ORDER BY reply_count DESC`;
-              db.all(statsQuery, dateParamMsg, (err, adminStats) => {
+              // placeholder ตัวแรกอยู่ใน subquery (SELECT list) มาก่อนตัวที่สองใน WHERE clause
+              // ตามลำดับที่ปรากฏจริงในสตริง SQL ด้านบน จึงต้องส่ง date ซ้ำสองครั้งเมื่อมีการกรองวันที่
+              const statsParamMsg = date ? [date, ...dateParamMsg] : dateParamMsg;
+              db.all(statsQuery, statsParamMsg, (err, adminStats) => {
                 data.admin_stats = adminStats || [];
                 res.json(data);
               });
@@ -1317,20 +1335,36 @@ app.post('/api/rich_messages', checkAuth, checkBroadcastRole, async (req, res) =
   const { name, action_value, imageBase64 } = req.body;
   
   if (!imageBase64) return res.status(400).json({ error: 'Image required' });
-  
-  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
-  let ext = 'jpg';
-  if (imageBase64.indexOf(';base64') > -1) {
-    ext = imageBase64.substring("data:image/".length, imageBase64.indexOf(";base64"));
+
+  // จำกัดชนิดไฟล์เป็นรูปภาพที่อนุญาตเท่านั้น กันไฟล์ที่รันโค้ดได้ (เช่น SVG) หลุดขึ้นไปเก็บบน Storage
+  const ALLOWED_IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+  const mimeMatch = imageBase64.match(/^data:image\/(\w+);base64,/);
+  const detectedExt = mimeMatch ? mimeMatch[1].toLowerCase() : '';
+  if (!ALLOWED_IMAGE_EXT.includes(detectedExt)) {
+    return res.status(400).json({ error: 'รองรับเฉพาะไฟล์รูปภาพ (jpg, jpeg, png, gif, webp) เท่านั้น' });
   }
-  
+
+  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+
+  // จำกัดขนาดไฟล์ไม่เกิน 10MB
+  const MAX_FILE_SIZE = 10 * 1024 * 1024;
+  const approxSize = Math.ceil(base64Data.length * 3 / 4);
+  if (approxSize > MAX_FILE_SIZE) {
+    return res.status(400).json({ error: 'ไฟล์มีขนาดใหญ่เกิน 10MB' });
+  }
+
+  const ext = detectedExt;
   const filename = `rm_${Date.now()}.${ext}`;
   const buffer = Buffer.from(base64Data, 'base64');
-  
+
   const { error: rmErr } = await supabase.storage.from('uploads').upload(filename, buffer, {
     contentType: `image/${ext}`
   });
-  
+  if (rmErr) {
+    console.error('❌ อัปโหลดรูปริชเมสเสจไม่สำเร็จ:', rmErr.message);
+    return res.status(500).json({ error: 'อัปโหลดรูปไม่สำเร็จ: ' + rmErr.message });
+  }
+
   const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(filename);
   const secureUrl = publicUrlData.publicUrl;
   
@@ -1422,8 +1456,16 @@ app.post('/api/customers/:userId/read', checkAuth, (req, res) => {
   const now = new Date().toISOString();
   
   db.run(`UPDATE customers SET read_by_name = ?, read_at = ? WHERE user_id = ?`, [adminName, now, req.params.userId], function(err) {
+    if (err) {
+      console.error('❌ บันทึกสถานะอ่านแล้วไม่สำเร็จ:', err.message);
+      return res.status(500).json({ success: false, message: 'บันทึกสถานะอ่านแล้วไม่สำเร็จ' });
+    }
     // อัปเดตรายข้อความเฉพาะฝั่งลูกค้าที่ยังไม่ได้ลงชื่อว่าใครอ่าน
     db.run(`UPDATE messages SET read_by_name = ? WHERE user_id = ? AND sender = 'customer' AND read_by_name IS NULL`, [adminName, req.params.userId], function(errMsg) {
+      if (errMsg) {
+        console.error('❌ บันทึกสถานะอ่านแล้ว (รายข้อความ) ไม่สำเร็จ:', errMsg.message);
+        return res.status(500).json({ success: false, message: 'บันทึกสถานะอ่านแล้วไม่สำเร็จ' });
+      }
       io.emit('updateReadStatus', { userId: req.params.userId, readByName: adminName, readAt: now });
       res.json({ success: true });
     });
@@ -1440,6 +1482,10 @@ app.post('/api/customers/:userId/status', checkAuth, async (req, res) => {
   }
   
   db.run(updateQuery, [status, req.params.userId], async function(err) {
+    if (err) {
+      console.error('❌ เปลี่ยนสถานะแชทไม่สำเร็จ:', err.message);
+      return res.status(500).json({ success: false, message: 'เปลี่ยนสถานะแชทไม่สำเร็จ' });
+    }
     io.emit('updateCustomerStatusOnly', { userId: req.params.userId, status });
     
     if (status === 'completed') {
@@ -1484,6 +1530,10 @@ app.post('/api/customers/:userId/status', checkAuth, async (req, res) => {
 app.post('/api/customers/:userId/claim', checkAuth, (req, res) => {
   const adminId = req.session.admin.userId;
   db.run(`UPDATE customers SET handled_by = ? WHERE user_id = ?`, [adminId, req.params.userId], function(err) {
+    if (err) {
+      console.error('❌ กดรับเรื่องไม่สำเร็จ:', err.message);
+      return res.status(500).json({ success: false, message: 'กดรับเรื่องไม่สำเร็จ' });
+    }
     io.emit('updateCustomerClaim', { userId: req.params.userId, handledBy: adminId });
     res.json({ success: true });
   });
@@ -1492,6 +1542,10 @@ app.post('/api/customers/:userId/claim', checkAuth, (req, res) => {
 app.post('/api/customers/:userId/note', checkAuth, (req, res) => {
   const { note } = req.body;
   db.run(`UPDATE customers SET internal_note = ? WHERE user_id = ?`, [note, req.params.userId], function(err) {
+    if (err) {
+      console.error('❌ บันทึกโน้ตภายในไม่สำเร็จ:', err.message);
+      return res.status(500).json({ success: false, message: 'บันทึกโน้ตภายในไม่สำเร็จ' });
+    }
     res.json({ success: true });
   });
 });
@@ -1515,16 +1569,39 @@ app.post('/api/reply', checkAuth, async (req, res) => {
 
     if ((msgType === 'image' || msgType === 'file') && base64Input) {
       const isPdf = msgType === 'file';
+
+      // จำกัดชนิดไฟล์ที่รับ: รูปภาพ (jpg/jpeg/png/gif/webp) หรือ PDF เท่านั้น กันไม่ให้อัปโหลด
+      // ไฟล์ที่รันโค้ดได้ (เช่น SVG ที่แฝง <script>) ขึ้นไปเก็บบน Supabase Storage แบบเปิดสาธารณะ
+      const ALLOWED_IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+      if (isPdf) {
+        if (!/^data:application\/pdf;base64,/.test(base64Input)) {
+          return res.status(400).json({ error: 'รองรับเฉพาะไฟล์ PDF เท่านั้น' });
+        }
+      } else {
+        const mimeMatch = base64Input.match(/^data:image\/(\w+);base64,/);
+        const detectedExt = mimeMatch ? mimeMatch[1].toLowerCase() : '';
+        if (!ALLOWED_IMAGE_EXT.includes(detectedExt)) {
+          return res.status(400).json({ error: 'รองรับเฉพาะไฟล์รูปภาพ (jpg, jpeg, png, gif, webp) เท่านั้น' });
+        }
+      }
+
       const base64Data = base64Input.replace(/^data:(image|application)\/\w+;base64,/, "");
-      
+
+      // จำกัดขนาดไฟล์ไม่เกิน 10MB ต่อไฟล์ กันโหลด Storage เต็มโควตา
+      const MAX_FILE_SIZE = 10 * 1024 * 1024;
+      const approxSize = Math.ceil(base64Data.length * 3 / 4);
+      if (approxSize > MAX_FILE_SIZE) {
+        return res.status(400).json({ error: 'ไฟล์มีขนาดใหญ่เกิน 10MB' });
+      }
+
       let ext = isPdf ? 'pdf' : 'jpg';
       if (!isPdf && base64Input.indexOf(';base64') > -1) {
         ext = base64Input.substring("data:image/".length, base64Input.indexOf(";base64"));
       }
-      
+
       const generatedName = isPdf ? `file_${Date.now()}.${ext}` : `img_${Date.now()}.${ext}`;
       const buffer = Buffer.from(base64Data, 'base64');
-      
+
       const { error: upErr } = await supabase.storage.from('uploads').upload(generatedName, buffer, {
         contentType: isPdf ? 'application/pdf' : `image/${ext}`
       });
@@ -1619,11 +1696,17 @@ app.post('/api/reply', checkAuth, async (req, res) => {
       messages: [lineMessage]
     });
 
-    db.run(
-      `INSERT INTO messages (user_id, sender, admin_name, admin_picture, text, timestamp, admin_id, msg_type, file_url) VALUES (?, 'admin', ?, ?, ?, ?, ?, ?, ?)`,
-      [userId, senderName, admin.pictureUrl, msgText, now, admin.userId, msgType, savedFileUrl]
-    );
-    db.run(`UPDATE customers SET status = 'in_progress', last_update = ? WHERE user_id = ?`, [now, userId]);
+    // รอให้บันทึกลง DB สำเร็จจริงก่อน ถ้าพังให้เด้งเข้า catch ด้านล่างแทนที่จะบอกลูกค้าจอว่าสำเร็จเฉยๆ
+    await new Promise((resolve, reject) => {
+      db.run(
+        `INSERT INTO messages (user_id, sender, admin_name, admin_picture, text, timestamp, admin_id, msg_type, file_url) VALUES (?, 'admin', ?, ?, ?, ?, ?, ?, ?)`,
+        [userId, senderName, admin.pictureUrl, msgText, now, admin.userId, msgType, savedFileUrl],
+        (err) => err ? reject(err) : resolve()
+      );
+    });
+    await new Promise((resolve, reject) => {
+      db.run(`UPDATE customers SET status = 'in_progress', last_update = ? WHERE user_id = ?`, [now, userId], (err) => err ? reject(err) : resolve());
+    });
 
     io.emit('newMessage', { userId, sender: 'admin', adminName: senderName, adminPicture: admin.pictureUrl, text: msgText, timestamp: now, msgType, fileUrl: savedFileUrl });
     io.emit('updateCustomer', { userId, status: 'in_progress', last_update: now });
